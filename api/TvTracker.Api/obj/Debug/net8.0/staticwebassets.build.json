@@ -1,0 +1,11 @@
+{
+  "Version": 1,
+  "Hash": "VneR/hF6QDDa4OGmfcgPuo3fqejIPALo9rHLdJMfF94=",
+  "Source": "TvTracker.Api",
+  "BasePath": "_content/TvTracker.Api",
+  "Mode": "Default",
+  "ManifestType": "Build",
+  "ReferencedProjectsConfiguration": [],
+  "DiscoveryPatterns": [],
+  "Assets": []
+}
