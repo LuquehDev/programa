@@ -1,5 +1,3 @@
-using System;
-using System.Net;                  // para IPAddress (inet)
 using Microsoft.EntityFrameworkCore;
 
 namespace TvTracker.Data
@@ -8,7 +6,6 @@ namespace TvTracker.Data
     {
         public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
 
-        // DbSets (classes em PLURAL conforme pediste)
         public required DbSet<Actors> Actors { get; set; }
         public required DbSet<Episodes> Episodes { get; set; }
         public required DbSet<TvShowActors> TvShowActors { get; set; }
@@ -177,21 +174,45 @@ namespace TvTracker.Data
             // =========================== ACTORS =========================
             modelBuilder.Entity<Actors>(e =>
             {
-                e.ToTable("actors");
+                e.ToTable("actors", "app"); // schema app
+
                 e.HasKey(x => x.Id);
 
-                e.Property(x => x.Id).HasColumnName("id")
-                    .HasDefaultValueSql("gen_random_uuid()").ValueGeneratedOnAdd();
+                e.Property(x => x.Id)
+                    .HasColumnName("id")
+                    .HasDefaultValueSql("gen_random_uuid()")
+                    .ValueGeneratedOnAdd();
 
-                e.Property(x => x.FullName).HasColumnName("full_name").IsRequired();
-                e.HasIndex(x => x.FullName).HasDatabaseName("ix_actors_name");
+                e.Property(x => x.FullName)
+                    .HasColumnName("full_name")
+                    .IsRequired();
 
-                e.Property(x => x.CreatedAt).HasColumnName("created_at")
-                    .HasDefaultValueSql("now()").ValueGeneratedOnAdd();
+                e.HasIndex(x => x.FullName)
+                    .HasDatabaseName("ix_actors_name");
 
-                e.Property(x => x.UpdatedAt).HasColumnName("updated_at")
-                    .HasDefaultValueSql("now()").ValueGeneratedOnAdd();
+                // Novas colunas
+                e.Property(x => x.Nationality)
+                    .HasColumnName("nationality");
+
+                e.Property(x => x.BirthDate)
+                    .HasColumnName("birth_date")
+                    .HasColumnType("date")
+                    .IsRequired(false);
+
+                e.Property(x => x.Introduction)
+                    .HasColumnName("introduction");
+
+                e.Property(x => x.CreatedAt)
+                    .HasColumnName("created_at")
+                    .HasDefaultValueSql("now()")
+                    .ValueGeneratedOnAdd();
+
+                e.Property(x => x.UpdatedAt)
+                    .HasColumnName("updated_at")
+                    .HasDefaultValueSql("now()")
+                    .ValueGeneratedOnAdd();
             });
+
 
             // ======================= TV_SHOW_ACTORS =====================
             modelBuilder.Entity<TvShowActors>(e =>
@@ -240,7 +261,6 @@ namespace TvTracker.Data
                 e.Property(x => x.TvShowId).HasColumnName("tv_show_id");
                 e.Property(x => x.GenreId).HasColumnName("genre_id");
 
-                // RELAÇÃO correta: TvShowGenres N:1 TvShows (invertida em TvShows.TvShowGenres)
                 e.HasOne(x => x.TvShow)
                     .WithMany(s => s.TvShowGenres)
                     .HasForeignKey(x => x.TvShowId)
@@ -271,7 +291,6 @@ namespace TvTracker.Data
                     .HasForeignKey(x => x.UserId)
                     .OnDelete(DeleteBehavior.Cascade);
 
-                // RELAÇÃO correta: Favorites N:1 TvShows (invertida em TvShows.Favorites)
                 e.HasOne(x => x.TvShow)
                     .WithMany(s => s.Favorites)
                     .HasForeignKey(x => x.TvShowId)
@@ -305,7 +324,6 @@ namespace TvTracker.Data
                     .HasForeignKey(x => x.UserId)
                     .OnDelete(DeleteBehavior.Cascade);
 
-                // RELAÇÃO correta: Recommendations N:1 TvShows (invertida em TvShows.Recommendations)
                 e.HasOne(x => x.TvShow)
                     .WithMany(s => s.Recommendations)
                     .HasForeignKey(x => x.TvShowId)
@@ -356,7 +374,7 @@ namespace TvTracker.Data
                 e.Property(x => x.Action).HasColumnName("action").IsRequired();
                 e.Property(x => x.Entity).HasColumnName("entity");
                 e.Property(x => x.EntityId).HasColumnName("entity_id");
-                e.Property(x => x.Ip).HasColumnName("ip"); // inet <-> IPAddress
+                e.Property(x => x.Ip).HasColumnName("ip");
 
                 e.Property(x => x.CreatedAt).HasColumnName("created_at")
                     .HasDefaultValueSql("now()").ValueGeneratedOnAdd();

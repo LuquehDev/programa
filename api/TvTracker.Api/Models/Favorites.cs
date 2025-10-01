@@ -15,8 +15,8 @@ public class Favorites
     public DateTimeOffset CreatedAt { get; set; }
 
     [JsonIgnore]
-    public required Users User { get; set; }
+    public Users? User { get; set; }
 
     [JsonIgnore]
-    public required TvShows TvShow { get; set; }
+    public TvShows? TvShow { get; set; }
 }

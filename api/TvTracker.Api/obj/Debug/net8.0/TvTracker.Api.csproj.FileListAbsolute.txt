@@ -246,3 +246,4 @@ C:\Users\Luiz Paiva\Desktop\DesafioTekever\programa\api\TvTracker.Api\obj\Debug\
 C:\Users\Luiz Paiva\Desktop\DesafioTekever\programa\api\TvTracker.Api\obj\Debug\net8.0\TvTracker.Api.pdb
 C:\Users\Luiz Paiva\Desktop\DesafioTekever\programa\api\TvTracker.Api\obj\Debug\net8.0\TvTracker.Api.genruntimeconfig.cache
 C:\Users\Luiz Paiva\Desktop\DesafioTekever\programa\api\TvTracker.Api\obj\Debug\net8.0\ref\TvTracker.Api.dll
+C:\Users\Luiz Paiva\Desktop\DesafioTekever\programa\api\TvTracker.Api\obj\Debug\net8.0\TvTracker.Api.sourcelink.json
