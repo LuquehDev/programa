@@ -1,0 +1,169 @@
+BEGIN;
+
+
+CREATE TABLE IF NOT EXISTS app.actors
+(
+    id uuid NOT NULL DEFAULT gen_random_uuid(),
+    full_name text COLLATE pg_catalog."default" NOT NULL,
+    created_at timestamp with time zone NOT NULL DEFAULT now(),
+    updated_at timestamp with time zone NOT NULL DEFAULT now(),
+    nationality text COLLATE pg_catalog."default",
+    birth_date date,
+    introduction text COLLATE pg_catalog."default",
+    CONSTRAINT actors_pkey PRIMARY KEY (id)
+);
+
+CREATE TABLE IF NOT EXISTS app.episodes
+(
+    id uuid NOT NULL DEFAULT gen_random_uuid(),
+    tv_show_id uuid NOT NULL,
+    season_number integer NOT NULL,
+    episode_number integer NOT NULL,
+    title text COLLATE pg_catalog."default" NOT NULL,
+    synopsis text COLLATE pg_catalog."default",
+    release_date date,
+    created_at timestamp with time zone NOT NULL DEFAULT now(),
+    updated_at timestamp with time zone NOT NULL DEFAULT now(),
+    CONSTRAINT episodes_pkey PRIMARY KEY (id),
+    CONSTRAINT episodes_tv_show_id_season_number_episode_number_key UNIQUE (tv_show_id, season_number, episode_number)
+);
+
+CREATE TABLE IF NOT EXISTS app.favorites
+(
+    user_id uuid NOT NULL,
+    tv_show_id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL DEFAULT now(),
+    CONSTRAINT favorites_pkey PRIMARY KEY (user_id, tv_show_id)
+);
+
+CREATE TABLE IF NOT EXISTS app.genres
+(
+    id uuid NOT NULL DEFAULT gen_random_uuid(),
+    name text COLLATE pg_catalog."default" NOT NULL,
+    CONSTRAINT genres_pkey PRIMARY KEY (id),
+    CONSTRAINT genres_name_key UNIQUE (name)
+);
+
+CREATE TABLE IF NOT EXISTS app.refresh_tokens
+(
+    id uuid NOT NULL DEFAULT gen_random_uuid(),
+    user_id uuid NOT NULL,
+    token_hash text COLLATE pg_catalog."default" NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    revoked_at timestamp with time zone,
+    created_at timestamp with time zone NOT NULL DEFAULT now(),
+    CONSTRAINT refresh_tokens_pkey PRIMARY KEY (id),
+    CONSTRAINT refresh_tokens_token_hash_key UNIQUE (token_hash)
+);
+
+CREATE TABLE IF NOT EXISTS app.tv_show_actors
+(
+    tv_show_id uuid NOT NULL,
+    actor_id uuid NOT NULL,
+    billing integer,
+    CONSTRAINT tv_show_actors_pkey PRIMARY KEY (tv_show_id, actor_id)
+);
+
+CREATE TABLE IF NOT EXISTS app.tv_show_genres
+(
+    tv_show_id uuid NOT NULL,
+    genre_id uuid NOT NULL,
+    CONSTRAINT tv_show_genres_pkey PRIMARY KEY (tv_show_id, genre_id)
+);
+
+CREATE TABLE IF NOT EXISTS app.tv_shows
+(
+    id uuid NOT NULL DEFAULT gen_random_uuid(),
+    title text COLLATE pg_catalog."default" NOT NULL,
+    description text COLLATE pg_catalog."default",
+    type text COLLATE pg_catalog."default",
+    release_year integer,
+    created_at timestamp with time zone NOT NULL DEFAULT now(),
+    updated_at timestamp with time zone NOT NULL DEFAULT now(),
+    CONSTRAINT tv_shows_pkey PRIMARY KEY (id)
+);
+
+CREATE TABLE IF NOT EXISTS app.users
+(
+    id uuid NOT NULL DEFAULT gen_random_uuid(),
+    email citext COLLATE pg_catalog."default" NOT NULL,
+    email_verified boolean NOT NULL DEFAULT false,
+    password_hash text COLLATE pg_catalog."default" NOT NULL,
+    display_name text COLLATE pg_catalog."default",
+    is_admin boolean NOT NULL DEFAULT false,
+    consent_rgpd boolean NOT NULL DEFAULT false,
+    created_at timestamp with time zone NOT NULL DEFAULT now(),
+    updated_at timestamp with time zone NOT NULL DEFAULT now(),
+    deleted_at timestamp with time zone,
+    CONSTRAINT users_pkey PRIMARY KEY (id),
+    CONSTRAINT users_email_key UNIQUE (email)
+);
+
+ALTER TABLE IF EXISTS app.episodes
+    ADD CONSTRAINT episodes_tv_show_id_fkey FOREIGN KEY (tv_show_id)
+    REFERENCES app.tv_shows (id) MATCH SIMPLE
+    ON UPDATE NO ACTION
+    ON DELETE CASCADE;
+CREATE INDEX IF NOT EXISTS ix_episodes_show
+    ON app.episodes(tv_show_id);
+
+
+ALTER TABLE IF EXISTS app.favorites
+    ADD CONSTRAINT favorites_tv_show_id_fkey FOREIGN KEY (tv_show_id)
+    REFERENCES app.tv_shows (id) MATCH SIMPLE
+    ON UPDATE NO ACTION
+    ON DELETE CASCADE;
+CREATE INDEX IF NOT EXISTS ix_fav_show
+    ON app.favorites(tv_show_id);
+
+
+ALTER TABLE IF EXISTS app.favorites
+    ADD CONSTRAINT favorites_user_id_fkey FOREIGN KEY (user_id)
+    REFERENCES app.users (id) MATCH SIMPLE
+    ON UPDATE NO ACTION
+    ON DELETE CASCADE;
+CREATE INDEX IF NOT EXISTS ix_fav_user
+    ON app.favorites(user_id);
+
+
+ALTER TABLE IF EXISTS app.refresh_tokens
+    ADD CONSTRAINT refresh_tokens_user_id_fkey FOREIGN KEY (user_id)
+    REFERENCES app.users (id) MATCH SIMPLE
+    ON UPDATE NO ACTION
+    ON DELETE CASCADE;
+CREATE INDEX IF NOT EXISTS ix_refresh_user
+    ON app.refresh_tokens(user_id);
+
+
+ALTER TABLE IF EXISTS app.tv_show_actors
+    ADD CONSTRAINT tv_show_actors_actor_id_fkey FOREIGN KEY (actor_id)
+    REFERENCES app.actors (id) MATCH SIMPLE
+    ON UPDATE NO ACTION
+    ON DELETE CASCADE;
+CREATE INDEX IF NOT EXISTS ix_tsa_actor
+    ON app.tv_show_actors(actor_id);
+
+
+ALTER TABLE IF EXISTS app.tv_show_actors
+    ADD CONSTRAINT tv_show_actors_tv_show_id_fkey FOREIGN KEY (tv_show_id)
+    REFERENCES app.tv_shows (id) MATCH SIMPLE
+    ON UPDATE NO ACTION
+    ON DELETE CASCADE;
+
+
+ALTER TABLE IF EXISTS app.tv_show_genres
+    ADD CONSTRAINT tv_show_genres_genre_id_fkey FOREIGN KEY (genre_id)
+    REFERENCES app.genres (id) MATCH SIMPLE
+    ON UPDATE NO ACTION
+    ON DELETE RESTRICT;
+CREATE INDEX IF NOT EXISTS ix_tsg_genre
+    ON app.tv_show_genres(genre_id);
+
+
+ALTER TABLE IF EXISTS app.tv_show_genres
+    ADD CONSTRAINT tv_show_genres_tv_show_id_fkey FOREIGN KEY (tv_show_id)
+    REFERENCES app.tv_shows (id) MATCH SIMPLE
+    ON UPDATE NO ACTION
+    ON DELETE CASCADE;
+
+END;
