@@ -28,9 +28,8 @@ The project demonstrates authentication with JWT (with TTL), data filtering and 
 
 ```
 [React SPA] <--> [ASP.NET Core API] <--> [PostgreSQL]
-                       |
-                       |--> [SendGrid API]
-                       |--> [OMDb API]
+     |                  |
+     |--> [OMDb API]    |--> [SendGrid API]
 ```
 
 ---
