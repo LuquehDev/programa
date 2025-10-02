@@ -54,7 +54,7 @@ export default function ActorList() {
     load();
   }, []);
 
-  // Filtrar nacionalidades
+  // ---------- nacionalidades aqui ----------
   const allNationalities = useMemo(() => {
     const set = new Set<string>();
     items.forEach((a) => {
@@ -63,7 +63,7 @@ export default function ActorList() {
     return Array.from(set).sort();
   }, [items]);
 
-  // filtros e ordenação
+  // ---------- filtros e ordenação aqui ----------
   const filteredItems = useMemo(() => {
     let result = items;
     if (search.trim()) {
@@ -90,7 +90,7 @@ export default function ActorList() {
     setPage((p) => Math.min(Math.max(1, p), totalPages));
   }, [totalPages]);
 
-  // ---------- Formatar CSV ----------
+  // ---------- formatar pra CSV ----------
   function toCSV(rows: Actor[]) {
     const esc = (v: unknown) => {
       const s = v == null ? "" : String(v);
@@ -203,7 +203,7 @@ export default function ActorList() {
           </p>
         </div>
 
-        {/* filtros + export à direita */}
+        {/* filtros*/}
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
           <div className="flex flex-col md:flex-row gap-4 items-start">
             <input
@@ -245,7 +245,7 @@ export default function ActorList() {
           </div>
         </div>
 
-        {/* Loading / Error */}
+        {/* Loading ou Error */}
         {loading && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
             {Array.from({ length: PAGE_SIZE }).map((_, i) => (

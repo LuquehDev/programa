@@ -6,8 +6,6 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
 using TvTracker.Data;
-using SendGrid;
-using SendGrid.Helpers.Mail;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -79,7 +77,6 @@ if (app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 app.UseCors(corsPolicy);
 
-// Auth middlewares
 app.UseAuthentication();
 app.UseAuthorization();
 

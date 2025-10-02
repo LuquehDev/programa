@@ -21,6 +21,9 @@ function Register() {
   const [consentRgpd, setConsentRgpd] = useState(false);
   const [loading, setLoading] = useState(false);
 
+
+  // tudo o que for de registro ta aqui
+  
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (loading) return;
@@ -115,6 +118,8 @@ function Register() {
       setLoading(false);
     }
   };
+
+  // ----------- //
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-rose-50 flex items-center justify-center px-4 relative overflow-hidden">

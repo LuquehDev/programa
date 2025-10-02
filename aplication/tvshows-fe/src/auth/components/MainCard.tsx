@@ -57,7 +57,6 @@ export default function MainCard({
       if (alive) setResolvedSrc(placeholderSrc);
     })();
     return () => { alive = false; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [image, poster?.title, poster?.year, poster?.kind, person?.name]);
 
   return (

@@ -5,6 +5,7 @@ import { useAuth } from "@/lib/auth";
 import { toast } from "sonner";
 
 function Login() {
+  // a lógica do login ta no auth.cs caso eu esqueça
   const { isAuthenticated, login } = useAuth();
   const loc = useLocation() as any;
 

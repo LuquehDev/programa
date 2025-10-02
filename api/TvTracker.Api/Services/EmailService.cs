@@ -1,8 +1,5 @@
-using System;
-using System.Threading.Tasks;
 using SendGrid;
 using SendGrid.Helpers.Mail;
-using Microsoft.Extensions.Configuration;
 
 public class EmailService
 {
@@ -29,6 +26,6 @@ public class EmailService
         var msg = MailHelper.CreateSingleEmail(from, to, subject, plainText, htmlContent);
         var response = await client.SendEmailAsync(msg);
 
-        Console.WriteLine($"✅ Email enviado para {emailDestino}, StatusCode: {response.StatusCode}");
+        Console.WriteLine($"Email enviado para {emailDestino}, StatusCode: {response.StatusCode}");
     }
 }

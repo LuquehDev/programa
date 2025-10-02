@@ -76,7 +76,6 @@ export default function FavoritesPage() {
 
   useEffect(() => {
     load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
 
   async function removeFavorite(tvShowId: string) {
@@ -197,7 +196,7 @@ export default function FavoritesPage() {
 </html>`);
     win.document.close();
   }
-  // ------------------------
+  // ------------------------ //
 
   const total = items.length;
   const totalPages = useMemo(

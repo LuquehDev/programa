@@ -24,7 +24,6 @@ type EpisodeDto = {
   runtimeMin?: number | null;
   airDate?: string | null;
   overview?: string | null;
-  // formatos alternativos do endpoint:
   EpisodeNumber?: number | null;
   SeasonNumber?: number | null;
   Title?: string | null;
@@ -60,7 +59,9 @@ function normEp(x: EpisodeDto, idx: number) {
   const season = x.season ?? x.SeasonNumber ?? null;
   const number = x.number ?? x.EpisodeNumber ?? null;
   return {
-    id: String(x.id ?? `${season ?? 0}-${number ?? idx}-${x.title ?? x.Title ?? "ep"}`),
+    id: String(
+      x.id ?? `${season ?? 0}-${number ?? idx}-${x.title ?? x.Title ?? "ep"}`
+    ),
     title: String(x.title ?? x.Title ?? "Episode"),
     season,
     number,
@@ -75,11 +76,13 @@ export default function TVShowDetails() {
   const loc = useLocation();
   const { id } = useParams<{ id: string }>();
   const { getPosterOrFallback } = useImages();
-
   const [data, setData] = useState<ApiShowDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [posterUrl, setPosterUrl] = useState<string>("");
+  const [episodes, setEpisodes] = useState<ReturnType<typeof normEp>[]>([]);
+  const [epsLoading, setEpsLoading] = useState(false);
+  const [epsErr, setEpsErr] = useState<string | null>(null);
 
   useEffect(() => {
     let abort = false;
@@ -101,25 +104,32 @@ export default function TVShowDetails() {
       }
     }
     if (id) run();
-    return () => { abort = true; };
+    return () => {
+      abort = true;
+    };
   }, [id]);
 
-  // Resolve a CAPA UMA VEZ e reutiliza em tudo
   useEffect(() => {
     let alive = true;
     (async () => {
       if (!data) return;
-      const kind = data.type === "movie" ? "movie" : data.type === "series" ? "series" : "any";
-      const url = await getPosterOrFallback({ title: data.title, year: data.releaseYear ?? undefined, kind });
+      const kind =
+        data.type === "movie"
+          ? "movie"
+          : data.type === "series"
+          ? "series"
+          : "any";
+      const url = await getPosterOrFallback({
+        title: data.title,
+        year: data.releaseYear ?? undefined,
+        kind,
+      });
       if (alive) setPosterUrl(url);
     })();
-    return () => { alive = false; };
+    return () => {
+      alive = false;
+    };
   }, [data, getPosterOrFallback]);
-
-  // Se details não trouxer episódios, buscar do endpoint dedicado e normalizar
-  const [episodes, setEpisodes] = useState<ReturnType<typeof normEp>[]>([]);
-  const [epsLoading, setEpsLoading] = useState(false);
-  const [epsErr, setEpsErr] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -130,7 +140,9 @@ export default function TVShowDetails() {
         setEpsLoading(true);
         setEpsErr(null);
 
-        let list: EpisodeDto[] = Array.isArray(data?.episodes) ? data.episodes : [];
+        let list: EpisodeDto[] = Array.isArray(data?.episodes)
+          ? data.episodes
+          : [];
         if (!list.length) {
           const r = await fetch(`${API_BASE}/tv-show/${data?.id}/episodes`);
           if (!r.ok) throw new Error(`HTTP ${r.status}`);
@@ -140,38 +152,55 @@ export default function TVShowDetails() {
 
         const mapped = list.map((e, i) => normEp(e, i));
         mapped.sort((a, b) => {
-          const sa = a.season ?? 0, sb = b.season ?? 0;
+          const sa = a.season ?? 0,
+            sb = b.season ?? 0;
           if (sa !== sb) return sa - sb;
-          const na = a.number ?? 0, nb = b.number ?? 0;
+          const na = a.number ?? 0,
+            nb = b.number ?? 0;
           return na - nb;
         });
 
         if (alive) setEpisodes(mapped);
       } catch (e: any) {
-        if (alive) { setEpsErr(e?.message ?? "Falha ao obter episódios"); setEpisodes([]); }
+        if (alive) {
+          setEpsErr(e?.message ?? "Falha ao obter episódios");
+          setEpisodes([]);
+        }
       } finally {
         if (alive) setEpsLoading(false);
       }
     }
 
     loadEpisodes();
-    return () => { alive = false; };
+    return () => {
+      alive = false;
+    };
   }, [data?.id, data?.episodes]);
 
-  if (!isAuthenticated) return <Navigate to="/login" replace state={{ from: loc }} />;
+  if (!isAuthenticated)
+    return <Navigate to="/login" replace state={{ from: loc }} />;
 
   if (!loading && (err || !data)) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
-          <h2 className="text-2xl font-bold text-gray-900 mb-4">{err ?? "Show Not Found"}</h2>
-          <Link to="/tv-shows" className="text-blue-600 hover:text-blue-700">Voltar à lista</Link>
+          <h2 className="text-2xl font-bold text-gray-900 mb-4">
+            {err ?? "Show Not Found"}
+          </h2>
+          <Link to="/tv-shows" className="text-blue-600 hover:text-blue-700">
+            Voltar à lista
+          </Link>
         </div>
       </div>
     );
   }
 
-  const kind = data?.type === "movie" ? "movie" : data?.type === "series" ? "series" : "any";
+  const kind =
+    data?.type === "movie"
+      ? "movie"
+      : data?.type === "series"
+      ? "series"
+      : "any";
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -184,7 +213,7 @@ export default function TVShowDetails() {
           Voltar aos TV Shows
         </Link>
 
-        {/* Skeleton */}
+        {/* Loading */}
         {loading && (
           <div className="bg-white rounded-2xl shadow-sm overflow-hidden animate-pulse">
             <div className="md:flex">
@@ -205,13 +234,35 @@ export default function TVShowDetails() {
             {/* Header*/}
             <MainCard
               image={posterUrl}
-              poster={!posterUrl ? { title: data.title, year: data.releaseYear ?? undefined, kind } : undefined}
+              poster={
+                !posterUrl
+                  ? {
+                      title: data.title,
+                      year: data.releaseYear ?? undefined,
+                      kind,
+                    }
+                  : undefined
+              }
               title={data.title}
               description={data.description ?? "Sem descrição disponível."}
               meta={[
-                { icon: <Calendar size={20} />, text: String(data.releaseYear ?? "—") },
-                { icon: <Tag size={20} />, text: data.genres?.length ? data.genres.map((g) => g.name).join(", ") : "—" },
-                { icon: <Star size={20} className="fill-current text-yellow-500" />, text: "—", className: "text-yellow-700" },
+                {
+                  icon: <Calendar size={20} />,
+                  text: String(data.releaseYear ?? "—"),
+                },
+                {
+                  icon: <Tag size={20} />,
+                  text: data.genres?.length
+                    ? data.genres.map((g) => g.name).join(", ")
+                    : "—",
+                },
+                {
+                  icon: (
+                    <Star size={20} className="fill-current text-yellow-500" />
+                  ),
+                  text: "—",
+                  className: "text-yellow-700",
+                },
               ]}
             />
 
@@ -222,7 +273,11 @@ export default function TVShowDetails() {
                 <h2 className="text-2xl font-bold text-gray-900">Episodes</h2>
               </div>
 
-              {epsLoading && <div className="text-gray-600 text-sm">A carregar episódios…</div>}
+              {epsLoading && (
+                <div className="text-gray-600 text-sm">
+                  A carregar episódios…
+                </div>
+              )}
               {epsErr && !epsLoading && (
                 <div className="text-red-600 text-sm">{epsErr}</div>
               )}
@@ -237,9 +292,24 @@ export default function TVShowDetails() {
                       title={e.title}
                       description={e.overview ?? "—"}
                       meta={[
-                        { icon: <Calendar size={16} />, text: e.airDate ?? "—" },
-                        { icon: <Tag size={16} />, text: `${e.season != null ? `S${e.season}` : "S–"} · ${e.number != null ? `E${e.number}` : "E–"}` },
-                        ...(e.runtimeMin != null ? [{ icon: <Tag size={16} />, text: `${e.runtimeMin} min` }] : []),
+                        {
+                          icon: <Calendar size={16} />,
+                          text: e.airDate ?? "—",
+                        },
+                        {
+                          icon: <Tag size={16} />,
+                          text: `${
+                            e.season != null ? `S${e.season}` : "S–"
+                          } · ${e.number != null ? `E${e.number}` : "E–"}`,
+                        },
+                        ...(e.runtimeMin != null
+                          ? [
+                              {
+                                icon: <Tag size={16} />,
+                                text: `${e.runtimeMin} min`,
+                              },
+                            ]
+                          : []),
                       ]}
                     />
                   ))}
@@ -266,10 +336,20 @@ export default function TVShowDetails() {
                       person={{ name: a.fullName }}
                       description={a.introduction ?? "—"}
                       meta={[
-                        { icon: <Users size={16} />, text: a.nationality ?? "—" },
-                        { icon: <Calendar size={16} />, text: age !== null ? `${age} anos` : "—" },
+                        {
+                          icon: <Users size={16} />,
+                          text: a.nationality ?? "—",
+                        },
+                        {
+                          icon: <Calendar size={16} />,
+                          text: age !== null ? `${age} anos` : "—",
+                        },
                       ]}
-                      badge={typeof a.billing === "number" ? `billing #${a.billing}` : undefined}
+                      badge={
+                        typeof a.billing === "number"
+                          ? `billing #${a.billing}`
+                          : undefined
+                      }
                     />
                   );
                 })}

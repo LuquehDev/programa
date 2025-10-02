@@ -5,6 +5,7 @@ function Home() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-cyan-50 relative overflow-hidden overflow-x-hidden">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-16">
+
         {/* Hero Section */}
         <div className="pt-20 pb-16 text-center relative z-10">
           <div className="flex justify-center mb-6">
@@ -50,7 +51,7 @@ function Home() {
           </div>
         </div>
 
-        {/* Features Section */}
+        {/* Features Parte */}
         <div className="py-20 relative z-10">
           <div className="text-center mb-16">
             <h2 className="text-4xl font-bold text-gray-900 mb-4">
@@ -103,7 +104,7 @@ function Home() {
           </div>
         </div>
 
-        {/* Stats Section */}
+        {/* Stats Parte */}
         <div className="py-20 bg-white/80 backdrop-blur-sm rounded-3xl shadow-2xl border border-gray-100/50 relative z-10 overflow-hidden">
           <div className="absolute bg-gradient-to-r from-purple-50/50 to-blue-50/50"></div>
 

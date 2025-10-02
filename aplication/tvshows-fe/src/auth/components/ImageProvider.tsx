@@ -1,13 +1,12 @@
 import React, { createContext, useContext, useRef } from "react";
 
-/** Tipos suportados pela OMDb */
 export type MediaKind = "movie" | "series" | "episode" | "game" | "any";
 
 export type ImageClientOptions = {
-  omdbKey?: string;             // default: "2d300440"
-  enableLocalStorage?: boolean; // default: true
-  defaultPoster?: string;       // default: placeholder simples
-  defaultPerson?: string;       // default: placeholder simples
+  omdbKey?: string;             
+  enableLocalStorage?: boolean; 
+  defaultPoster?: string;       
+  defaultPerson?: string;       
 };
 
 type PosterQuery = { title: string; year?: number; kind?: MediaKind };
@@ -22,10 +21,9 @@ export type ImageClient = {
 
 const ImageContext = createContext<ImageClient | null>(null);
 
-// ---------- Defaults e utilitários simples ----------
 const DEFAULTS = {
-  poster: "https://via.placeholder.com/640x360?text=Poster",
-  person: "https://via.placeholder.com/300x300?text=Person",
+  poster: "",
+  person: "",
 };
 
 function makeKey(prefix: string, parts: Record<string, string | number | undefined>) {
@@ -72,7 +70,6 @@ async function fetchJson(url: string) {
 export const ImageProvider: React.FC<
   React.PropsWithChildren<{ options?: ImageClientOptions }>
 > = ({ options, children }) => {
-  // cache em memória partilhado pelo provider
   const ramCache = useRef<Map<string, string | null>>(new Map()).current;
 
   const omdbKey = options?.omdbKey ?? "2d300440";
@@ -102,7 +99,7 @@ export const ImageProvider: React.FC<
     return poster;
   }
 
-  // ---- Foto de pessoa (Wikipedia REST summary) ----
+  // ---- Foto do ator ----
   async function getPersonPhoto(q: PersonQuery): Promise<string | null> {
     const key = makeKey("person", { name: q.name.trim() });
     const cached = readCache(key, ramCache, useLocal);

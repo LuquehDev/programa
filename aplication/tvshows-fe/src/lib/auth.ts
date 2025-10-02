@@ -58,8 +58,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [token, setToken] = useState<string | null>(null);
   const [expiresAtUtc, setExpiresAtUtc] = useState<string | null>(null);
   const [user, setUser] = useState<User | null>(null);
-
-  // guardar o id do setTimeout para limpar depois
   const timerRef = useRef<number | null>(null);
 
   const isAuthenticated = !!token && !!user && !isExpired(expiresAtUtc);
@@ -96,7 +94,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }, ms);
   }
 
-  // carregar sessão guardada ao iniciar
+  // carrega sessão
   useEffect(() => {
     const { t, exp, u } = readSession();
     if (t && exp && u && !isExpired(exp)) {
@@ -110,7 +108,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return clearTimer;
   }, []);
 
-  // sincronizar entre separadores
+  // sincroniza separador
   useEffect(() => {
     function onStorage() {
       const { t, exp, u } = readSession();

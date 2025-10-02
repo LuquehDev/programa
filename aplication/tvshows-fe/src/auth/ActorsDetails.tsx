@@ -96,7 +96,7 @@ export default function ActorDetails() {
           Voltar aos Actors
         </Link>
 
-        {/* Skeleton */}
+        {/* Loading */}
         {loading && (
           <div className="bg-white rounded-2xl shadow-sm overflow-hidden animate-pulse">
             <div className="md:flex">
@@ -114,7 +114,6 @@ export default function ActorDetails() {
         {/* Conteúdo */}
         {!loading && data && (
           <>
-            {/* Main header*/}
             <MainCard
               person={{ name: data.fullName }}
               title={data.fullName}

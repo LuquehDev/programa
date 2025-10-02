@@ -133,21 +133,21 @@ export default function TVShowList() {
     }
   }
 
-  // todos os géneros
+  // todos géneros
   const allGenres = useMemo(() => {
     const set = new Set<string>();
     items.forEach((s) => s.genres?.forEach((g) => set.add(g.name)));
     return Array.from(set).sort();
   }, [items]);
 
-  // todos os types
+  // todos types
   const allTypes = useMemo(() => {
     const set = new Set<string>();
     items.forEach((s) => s.type && set.add(s.type));
     return Array.from(set).sort();
   }, [items]);
 
-  // aplicar filtros + ordenar
+  // filtro e ordenação
   const filteredItems = useMemo(() => {
     let result = items;
     if (search.trim()) {
@@ -183,7 +183,6 @@ export default function TVShowList() {
     setPage((p) => Math.min(Math.max(1, p), totalPages));
   }, [totalPages]);
 
-  // -------- Export helpers --------
   function toCSV(rows: TVShow[]) {
     const esc = (v: unknown) => {
       const s = v == null ? "" : String(v);
@@ -306,7 +305,7 @@ export default function TVShowList() {
           </p>
         </div>
 
-        {/* filtros + export à direita */}
+        {/* filtros*/}
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
           <div className="flex flex-col md:flex-row md:flex-wrap gap-4 items-start">
             <input
