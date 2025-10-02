@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
+import React, { createContext, useContext, useEffect, useRef, useState } from "react";
 
 export type User = {
   id: string;
@@ -24,15 +24,20 @@ const KEY_USR = "auth_user";
 
 const AuthContext = createContext<AuthCtx | null>(null);
 
-function loadSession() {
+function readSession() {
   const t = sessionStorage.getItem(KEY_TOK);
   const exp = sessionStorage.getItem(KEY_EXP);
   const uStr = sessionStorage.getItem(KEY_USR);
   let u: User | null = null;
-  try { u = uStr ? JSON.parse(uStr) : null; } catch {}
+  try {
+    u = uStr ? JSON.parse(uStr) : null;
+  } catch {
+    u = null;
+  }
   return { t, exp, u };
 }
-function persistSession(t: string | null, exp: string | null, u: User | null) {
+
+function writeSession(t: string | null, exp: string | null, u: User | null) {
   if (t && exp && u) {
     sessionStorage.setItem(KEY_TOK, t);
     sessionStorage.setItem(KEY_EXP, exp);
@@ -43,6 +48,7 @@ function persistSession(t: string | null, exp: string | null, u: User | null) {
     sessionStorage.removeItem(KEY_USR);
   }
 }
+
 function isExpired(expUtc: string | null) {
   if (!expUtc) return true;
   return Date.now() >= new Date(expUtc).getTime();
@@ -52,83 +58,132 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [token, setToken] = useState<string | null>(null);
   const [expiresAtUtc, setExpiresAtUtc] = useState<string | null>(null);
   const [user, setUser] = useState<User | null>(null);
+
+  // guardar o id do setTimeout para limpar depois
   const timerRef = useRef<number | null>(null);
 
   const isAuthenticated = !!token && !!user && !isExpired(expiresAtUtc);
   const isVerified = !!user?.emailVerified && isAuthenticated;
 
   function clearTimer() {
-    if (timerRef.current) { window.clearTimeout(timerRef.current); timerRef.current = null; }
+    if (timerRef.current) {
+      window.clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
   }
-  function scheduleExpiry(expUtc: string | null) {
+
+  function doLogoutInternal() {
+    setToken(null);
+    setExpiresAtUtc(null);
+    setUser(null);
+    writeSession(null, null, null);
     clearTimer();
-    if (!expUtc) return;
+  }
+
+  function startExpiryTimer(expUtc: string | null) {
+    clearTimer();
+    if (!expUtc) {
+      doLogoutInternal();
+      return;
+    }
     const ms = new Date(expUtc).getTime() - Date.now();
     if (ms <= 0) {
-      setToken(null); setExpiresAtUtc(null); setUser(null);
-      persistSession(null, null, null);
+      doLogoutInternal();
       return;
     }
     timerRef.current = window.setTimeout(() => {
-      setToken(null); setExpiresAtUtc(null); setUser(null);
-      persistSession(null, null, null);
+      doLogoutInternal();
     }, ms);
   }
 
+  // carregar sessão guardada ao iniciar
   useEffect(() => {
-    const { t, exp, u } = loadSession();
+    const { t, exp, u } = readSession();
     if (t && exp && u && !isExpired(exp)) {
-      setToken(t); setExpiresAtUtc(exp); setUser(u);
-      scheduleExpiry(exp);
+      setToken(t);
+      setExpiresAtUtc(exp);
+      setUser(u);
+      startExpiryTimer(exp);
+    } else {
+      doLogoutInternal();
     }
     return clearTimer;
   }, []);
 
+  // sincronizar entre separadores
   useEffect(() => {
-    const onStorage = () => {
-      const { t, exp, u } = loadSession();
+    function onStorage() {
+      const { t, exp, u } = readSession();
       setToken(t ?? null);
       setExpiresAtUtc(exp ?? null);
       setUser(u ?? null);
-      scheduleExpiry(exp ?? null);
-    };
+      if (t && exp && u && !isExpired(exp)) {
+        startExpiryTimer(exp);
+      } else {
+        doLogoutInternal();
+      }
+    }
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);
   }, []);
 
   async function login(email: string, password: string) {
-    const API = import.meta.env.VITE_API_URL ?? "http://localhost:30120";
-    const res = await fetch(`${API}/auth/login`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ Email: email, Password: password }),
-    });
+    const API = (import.meta as any).env?.VITE_API_URL ?? "http://localhost:30120";
+
+    let res: Response;
+    try {
+      res = await fetch(`${API}/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ Email: email, Password: password }),
+      });
+    } catch {
+      throw new Error("Falha de rede ao contactar o servidor.");
+    }
+
     if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      const msg = res.status === 401
-        ? "Credenciais inválidas."
-        : (data.error || data.detail || "Erro no login.");
+      let data: any = {};
+      try {
+        data = await res.json();
+      } catch {}
+      const msg =
+        res.status === 401
+          ? "Credenciais inválidas."
+          : data.error || data.detail || "Erro no login.";
       throw new Error(msg);
     }
-    const data = await res.json();
+
+    let data: {
+      accessToken: string;
+      expiresAtUtc: string;
+      user: User;
+    };
+    try {
+      data = await res.json();
+    } catch {
+      throw new Error("Resposta inválida do servidor.");
+    }
+
     setToken(data.accessToken);
     setExpiresAtUtc(data.expiresAtUtc);
     setUser(data.user);
-    persistSession(data.accessToken, data.expiresAtUtc, data.user);
-    scheduleExpiry(data.expiresAtUtc);
+    writeSession(data.accessToken, data.expiresAtUtc, data.user);
+    startExpiryTimer(data.expiresAtUtc);
   }
 
   function logout() {
-    setToken(null);
-    setExpiresAtUtc(null);
-    setUser(null);
-    persistSession(null, null, null);
-    clearTimer();
+    doLogoutInternal();
   }
 
-  const value = useMemo<AuthCtx>(() => ({
-    user, token, isAuthenticated, isVerified, expiresAtUtc, login, logout
-  }), [user, token, isAuthenticated, isVerified, expiresAtUtc]);
+  const value: AuthCtx = {
+    user,
+    token,
+    isAuthenticated,
+    isVerified,
+    expiresAtUtc,
+    login,
+    logout,
+  };
 
   return React.createElement(AuthContext.Provider, { value }, children);
 }

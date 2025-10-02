@@ -1,0 +1,64 @@
+Connected to smtp://smtp.gmail.com:587/?starttls=always
+S: 220 smtp.gmail.com ESMTP 5b1f17b1804b1-46e6a692af6sm6243405e9.21 - gsmtp
+C: EHLO DESKTOP-HJVKOFE
+S: 250-smtp.gmail.com at your service, [109.49.133.99]
+S: 250-SIZE 35882577
+S: 250-8BITMIME
+S: 250-STARTTLS
+S: 250-ENHANCEDSTATUSCODES
+S: 250-PIPELINING
+S: 250-CHUNKING
+S: 250 SMTPUTF8
+C: STARTTLS
+S: 220 2.0.0 Ready to start TLS
+C: EHLO DESKTOP-HJVKOFE
+S: 250-smtp.gmail.com at your service, [109.49.133.99]
+S: 250-SIZE 35882577
+S: 250-8BITMIME
+S: 250-AUTH LOGIN PLAIN XOAUTH2 PLAIN-CLIENTTOKEN OAUTHBEARER XOAUTH
+S: 250-ENHANCEDSTATUSCODES
+S: 250-PIPELINING
+S: 250-CHUNKING
+S: 250 SMTPUTF8
+C: AUTH PLAIN ********
+S: 535-5.7.8 Username and Password not accepted. For more information, go to
+S: 535 5.7.8  https://support.google.com/mail/?p=BadCredentials 5b1f17b1804b1-46e6a692af6sm6243405e9.21 - gsmtp
+C: AUTH LOGIN
+S: 334 VXNlcm5hbWU6
+C: ********
+S: 334 UGFzc3dvcmQ6
+C: ********
+S: 535-5.7.8 Username and Password not accepted. For more information, go to
+S: 535 5.7.8  https://support.google.com/mail/?p=BadCredentials 5b1f17b1804b1-46e6a692af6sm6243405e9.21 - gsmtp
+Connected to smtp://smtp.gmail.com:587/?starttls=always
+S: 220 smtp.gmail.com ESMTP 5b1f17b1804b1-46e619c3ac3sm62508485e9.9 - gsmtp
+C: EHLO DESKTOP-HJVKOFE
+S: 250-smtp.gmail.com at your service, [109.49.133.99]
+S: 250-SIZE 35882577
+S: 250-8BITMIME
+S: 250-STARTTLS
+S: 250-ENHANCEDSTATUSCODES
+S: 250-PIPELINING
+S: 250-CHUNKING
+S: 250 SMTPUTF8
+C: STARTTLS
+S: 220 2.0.0 Ready to start TLS
+C: EHLO DESKTOP-HJVKOFE
+S: 250-smtp.gmail.com at your service, [109.49.133.99]
+S: 250-SIZE 35882577
+S: 250-8BITMIME
+S: 250-AUTH LOGIN PLAIN XOAUTH2 PLAIN-CLIENTTOKEN OAUTHBEARER XOAUTH
+S: 250-ENHANCEDSTATUSCODES
+S: 250-PIPELINING
+S: 250-CHUNKING
+S: 250 SMTPUTF8
+C: AUTH PLAIN ********
+S: 534-5.7.9 Application-specific password required. For more information, go to
+S: 534 5.7.9  https://support.google.com/mail/?p=InvalidSecondFactor 5b1f17b1804b1-46e619c3ac3sm62508485e9.9 - gsmtp
+C: AUTH LOGIN
+S: 334 VXNlcm5hbWU6
+C: ********
+S: 334 UGFzc3dvcmQ6
+C: ********
+S: 534-5.7.9 Application-specific password required. For more information, go to
+S: 534 5.7.9  https://support.google.com/mail/?p=InvalidSecondFactor 5b1f17b1804b1-46e619c3ac3sm62508485e9.9 - gsmtp

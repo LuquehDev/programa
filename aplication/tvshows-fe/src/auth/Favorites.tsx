@@ -1,14 +1,16 @@
-import { useEffect, useState, useMemo } from "react";
-import { Link, Navigate, useLocation } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { Navigate, useLocation } from "react-router-dom";
 import {
   Star,
   Calendar,
   Tag,
-  Eye,
   ChevronLeft,
   ChevronRight,
+  Download,
+  FileText,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
+import Card from "@/auth/components/Card";
 
 type Genre = { id: string; name: string };
 type TVShow = {
@@ -30,18 +32,16 @@ export default function FavoritesPage() {
   const { isAuthenticated, user } = useAuth();
   const loc = useLocation();
 
-  const [payload, setPayload] = useState<TVShow[]>([]);
+  const [items, setItems] = useState<TVShow[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [busyId, setBusyId] = useState<string | null>(null);
 
-  if (!isAuthenticated) {
+  if (!isAuthenticated)
     return <Navigate to="/login" replace state={{ from: loc }} />;
-  }
 
-  // Carrega favoritos (ids) e filtra shows no front a partir de /tv-shows
-  const load = async () => {
+  async function load() {
     if (!user?.id) {
       setErr("Não foi possível identificar o utilizador.");
       setLoading(false);
@@ -54,38 +54,33 @@ export default function FavoritesPage() {
       const resIds = await fetch(`${API_BASE}/users/${user.id}/favorites-ids`);
       if (!resIds.ok) throw new Error(`HTTP ${resIds.status}`);
       const favIds = (await resIds.json()) as string[];
-      const favSet = new Set(favIds);
+      const setIds = new Set(favIds);
 
-      if (favSet.size === 0) {
-        setPayload([]);
+      if (!setIds.size) {
+        setItems([]);
         return;
       }
 
       const resAll = await fetch(`${API_BASE}/tv-shows`);
       if (!resAll.ok) throw new Error(`HTTP ${resAll.status}`);
-      const allShows = (await resAll.json()) as TVShow[];
+      const all = (await resAll.json()) as TVShow[];
 
-      const onlyFavs = (Array.isArray(allShows) ? allShows : []).filter((s) =>
-        favSet.has(s.id)
-      );
-      setPayload(onlyFavs);
+      setItems((Array.isArray(all) ? all : []).filter((s) => setIds.has(s.id)));
     } catch (e: any) {
       setErr(e?.message ?? "Erro ao carregar favoritos");
-      setPayload([]);
+      setItems([]);
     } finally {
       setLoading(false);
     }
-  };
+  }
 
   useEffect(() => {
     load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
 
-  const removeFavorite = async (tvShowId: string) => {
-    if (!user?.id) {
-      setErr("Não foi possível identificar o utilizador.");
-      return;
-    }
+  async function removeFavorite(tvShowId: string) {
+    if (!user?.id) return setErr("Não foi possível identificar o utilizador.");
     try {
       setBusyId(tvShowId);
       const res = await fetch(
@@ -93,37 +88,173 @@ export default function FavoritesPage() {
         { method: "DELETE" }
       );
       if (!res.ok && res.status !== 204) throw new Error(`HTTP ${res.status}`);
-      setPayload((prev) => prev.filter((s) => s.id !== tvShowId));
+      setItems((prev) => prev.filter((s) => s.id !== tvShowId));
     } catch (e: any) {
       setErr(e?.message ?? "Não foi possível remover dos favoritos");
     } finally {
       setBusyId(null);
     }
-  };
+  }
 
-  // Paginação (idêntica à do TVShowList)
-  const total = payload.length;
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  // ---- Export helpers ----
+  function toCSV(rows: TVShow[]) {
+    const esc = (v: unknown) => {
+      const s = v == null ? "" : String(v);
+      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const header = [
+      "id",
+      "title",
+      "type",
+      "releaseYear",
+      "genres",
+      "rating",
+      "description",
+      "favoritedAt",
+    ];
+    const lines = [
+      header.join(","),
+      ...rows.map((r) =>
+        [
+          r.id,
+          r.title,
+          r.type ?? "",
+          r.releaseYear ?? "",
+          r.genres?.map((g) => g.name).join("|") ?? "",
+          r.rating ?? "",
+          r.description ?? "",
+          r.favoritedAt ?? "",
+        ]
+          .map(esc)
+          .join(",")
+      ),
+    ];
+    return lines.join("\n");
+  }
+
+  function downloadBlob(content: BlobPart, filename: string, type: string) {
+    const blob = new Blob([content], { type });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  function handleExportCSV() {
+    const csv = toCSV(items);
+    const ts = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+    downloadBlob(csv, `STfavorites-${ts}.csv`, "text/csv;charset=utf-8");
+  }
+
+  function handleExportPDF() {
+    const win = window.open("", "_blank");
+    if (!win) return;
+    const rows = items
+      .map(
+        (s) => `
+        <tr>
+          <td>${s.id}</td>
+          <td>${s.title}</td>
+          <td>${s.type ?? ""}</td>
+          <td>${s.releaseYear ?? ""}</td>
+          <td>${s.genres?.map((g) => g.name).join(", ") ?? ""}</td>
+          <td>${s.rating ?? ""}</td>
+          <td>${s.favoritedAt ?? ""}</td>
+          <td>${s.description ? s.description.replace(/</g, "&lt;") : ""}</td>
+        </tr>`
+      )
+      .join("");
+
+    win.document.write(`<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Favorites</title>
+<style>
+  body { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial; padding: 24px; }
+  h1 { font-size: 20px; margin: 0 0 12px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th, td { border: 1px solid #ddd; padding: 8px; vertical-align: top; }
+  th { background: #fff7ed; text-align: left; }
+</style>
+</head>
+<body>
+  <h1>Favorites — ${items.length} registos</h1>
+  <table>
+    <thead>
+      <tr><th>ID</th><th>Título</th><th>Tipo</th><th>Ano</th><th>Géneros</th><th>Rating</th><th>Favoritado em</th><th>Descrição</th></tr>
+    </thead>
+    <tbody>
+      ${rows || `<tr><td colspan="8">Sem dados</td></tr>`}
+    </tbody>
+  </table>
+  <script>window.onload = () => { window.print(); setTimeout(() => window.close(), 300); };</script>
+</body>
+</html>`);
+    win.document.close();
+  }
+  // ------------------------
+
+  const total = items.length;
+  const totalPages = useMemo(
+    () => Math.max(1, Math.ceil(total / PAGE_SIZE)),
+    [total]
+  );
+  const pageItems = useMemo(() => {
+    const start = (page - 1) * PAGE_SIZE;
+    return items.slice(start, start + PAGE_SIZE);
+  }, [items, page]);
+
   useEffect(() => {
     setPage((p) => Math.min(Math.max(1, p), totalPages));
   }, [totalPages]);
 
-  const pageItems = useMemo(() => {
-    const start = (page - 1) * PAGE_SIZE;
-    return payload.slice(start, start + PAGE_SIZE);
-  }, [payload, page]);
-
-  const goPrev = () => setPage((p) => Math.max(1, p - 1));
-  const goNext = () => setPage((p) => Math.min(totalPages, p + 1));
-  const goTo = (p: number) => setPage(p);
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 relative overflow-hidden">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative z-10">
-        <h1 className="text-4xl font-bold text-gray-900 mb-6">
-          Meus Favoritos
-        </h1>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-amber-50 to-yellow-50 relative overflow-hidden">
+      <div className="absolute inset-0 overflow-hidden">
+        <div className="absolute top-20 right-20 w-72 h-72 bg-gradient-to-br from-yellow-400/10 to-amber-400/10 rounded-full blur-3xl animate-pulse"></div>
+        <div className="absolute bottom-20 left-20 w-72 h-72 bg-gradient-to-br from-amber-400/10 to-orange-400/10 rounded-full blur-3xl animate-pulse delay-1000"></div>
+      </div>
 
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative z-10">
+        {/* Header */}
+        <div className="mb-8 text-center">
+          <div className="flex justify-center mb-4">
+            <div className="w-16 h-16 bg-gradient-to-br from-yellow-500 to-amber-600 rounded-2xl flex items-center justify-center shadow-2xl">
+              <Star className="text-white fill-white" size={32} />
+            </div>
+          </div>
+          <h1 className="text-5xl font-bold bg-gradient-to-r from-yellow-600 via-amber-600 to-orange-600 bg-clip-text text-transparent mb-2">
+            Favorites
+          </h1>
+          <p className="text-xl text-gray-700">Your starred TV shows</p>
+        </div>
+
+        {/* nova barra de ações à esquerda */}
+        <div className="mb-6">
+          <div className="flex gap-2">
+            <button
+              onClick={handleExportCSV}
+              className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 bg-white hover:bg-gray-50"
+              aria-label="Export favorites as CSV"
+            >
+              <Download size={16} /> Export CSV
+            </button>
+            <button
+              onClick={handleExportPDF}
+              className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 bg-white hover:bg-gray-50"
+              aria-label="Export favorites as PDF"
+            >
+              <FileText size={16} /> Export PDF
+            </button>
+          </div>
+        </div>
+
+        {/* Loading / Error */}
         {loading && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
             {Array.from({ length: PAGE_SIZE }).map((_, i) => (
@@ -136,7 +267,7 @@ export default function FavoritesPage() {
         )}
 
         {!loading && err && (
-          <div className="max-w-xl mx-auto p-4 bg-red-50 border border-red-200 text-red-700 rounded-xl">
+          <div className="max-w-xl mx-auto p-4 bg-yellow-50 border border-yellow-200 text-yellow-800 rounded-xl">
             {err}
           </div>
         )}
@@ -144,92 +275,64 @@ export default function FavoritesPage() {
         {!loading && !err && (
           <>
             {pageItems.length === 0 ? (
-              <p className="text-gray-600">Não tens favoritos ainda.</p>
+              <p className="text-gray-700 text-center">
+                Ainda não tens favoritos.
+              </p>
             ) : (
               <>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
                   {pageItems.map((show) => {
-                    const isBusy = busyId === show.id;
+                    const kind =
+                      show.type === "movie"
+                        ? "movie"
+                        : show.type === "series"
+                        ? "series"
+                        : "any";
+                    const busy = busyId === show.id;
+
                     return (
-                      <Link
+                      <Card
                         key={show.id}
                         to={`/tv-shows/${show.id}`}
-                        className="group relative bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-500 overflow-hidden transform hover:scale-105 hover:-translate-y-2 border border-gray-100/50"
-                      >
-                        <button
-                          type="button"
-                          aria-label="Remover dos favoritos"
-                          title="Remover dos favoritos"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            if (!isBusy) removeFavorite(show.id);
-                          }}
-                          className={`absolute top-4 right-4 z-10 w-10 h-10 rounded-full flex items-center justify-center shadow 
-                        bg-yellow-400 text-white ${
-                          isBusy
-                            ? "opacity-60 cursor-wait"
-                            : "hover:bg-yellow-500"
-                        }`}
-                        >
-                          <Star
-                            size={20}
-                            className="fill-current drop-shadow"
-                          />
-                        </button>
-
-                        <div className="aspect-video overflow-hidden relative">
-                          <img
-                            src={
-                              show.image ||
-                              "https://via.placeholder.com/640x360?text=TV+Show"
-                            }
-                            alt={show.title}
-                            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-                          />
-                          <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-                          <div className="absolute top-4 right-16 w-10 h-10 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-y-2 group-hover:translate-y-0">
-                            <Eye className="text-white" size={18} />
-                          </div>
-                        </div>
-
-                        <div className="p-6 relative">
-                          <h3 className="text-xl font-bold text-gray-900 mb-3 group-hover:bg-gradient-to-r group-hover:from-blue-600 group-hover:to-purple-600 group-hover:bg-clip-text group-hover:text-transparent transition-all duration-300">
-                            {show.title}
-                          </h3>
-
-                          <div className="space-y-3 mb-4">
-                            <div className="flex items-center text-sm text-gray-600 bg-gray-50 rounded-lg px-3 py-2">
-                              <Calendar
-                                size={16}
-                                className="mr-2 text-blue-500"
-                              />
-                              <span>{show.releaseYear ?? "—"}</span>
-                            </div>
-
-                            <div className="flex items-center text-sm text-gray-600 bg-gray-50 rounded-lg px-3 py-2">
-                              <Tag size={16} className="mr-2 text-purple-500" />
-                              <span>
-                                {show.genres && show.genres.length > 0
-                                  ? show.genres.map((g) => g.name).join(", ")
-                                  : "—"}
-                              </span>
-                            </div>
-                          </div>
-
-                          <p className="text-gray-600 text-sm line-clamp-3 leading-relaxed">
-                            {show.description ?? "No description available."}
-                          </p>
-                        </div>
-                      </Link>
+                        aspect="video"
+                        title={show.title}
+                        image={show.image}
+                        poster={{
+                          title: show.title,
+                          year: show.releaseYear,
+                          kind,
+                        }}
+                        description={
+                          show.description ?? "No description available."
+                        }
+                        meta={[
+                          {
+                            icon: (
+                              <Calendar size={16} className="text-amber-600" />
+                            ),
+                            text: String(show.releaseYear ?? "—"),
+                          },
+                          {
+                            icon: <Tag size={16} className="text-yellow-600" />,
+                            text: show.genres?.length
+                              ? show.genres.map((g) => g.name).join(", ")
+                              : "—",
+                          },
+                        ]}
+                        favorite={{
+                          isFav: true,
+                          isBusy: busy,
+                          onToggle: () => removeFavorite(show.id),
+                          ariaLabel: "Remover dos favoritos",
+                        }}
+                      />
                     );
                   })}
                 </div>
 
-                {/* Paginação idêntica à do TVShowList */}
                 <div className="mt-10 flex items-center justify-center gap-2">
                   <button
-                    onClick={goPrev}
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
                     disabled={page === 1}
                     className="inline-flex items-center gap-1 px-3 py-2 rounded-lg border border-gray-200 bg-white disabled:opacity-50"
                     aria-label="Previous page"
@@ -252,10 +355,10 @@ export default function FavoritesPage() {
                       return (
                         <button
                           key={p}
-                          onClick={() => goTo(p)}
+                          onClick={() => setPage(p)}
                           className={`w-9 h-9 rounded-lg border text-sm ${
                             active
-                              ? "bg-gradient-to-r from-blue-600 to-purple-600 text-white border-transparent"
+                              ? "bg-gradient-to-r from-yellow-600 to-amber-600 text-white border-transparent"
                               : "border-gray-200"
                           }`}
                         >
@@ -266,7 +369,7 @@ export default function FavoritesPage() {
                   </div>
 
                   <button
-                    onClick={goNext}
+                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                     disabled={page === totalPages}
                     className="inline-flex items-center gap-1 px-3 py-2 rounded-lg border border-gray-200 disabled:opacity-50"
                     aria-label="Next page"

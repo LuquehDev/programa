@@ -10,27 +10,35 @@ import Login from "./public/Login";
 import TVShowDetails from "./auth/TvShowDetails";
 import ActorDetails from "./auth/ActorsDetails";
 import Favorites from "./auth/Favorites";
+import { ImageProvider } from "./auth/components/ImageProvider";
 
 function App() {
   return (
     <AuthProvider>
-      <Router>
-        <div className="min-h-screen min-w-screen bg-gray-50">
-          <Header />
+      <ImageProvider
+        options={{
+          omdbKey: "2d300440",
+          enableLocalStorage: true,
+        }}
+      >
+        <Router>
+          <div className="min-h-screen min-w-screen bg-gray-50">
+            <Header />
             <Routes>
-            <Route path="/" element={<Home />} />
-            <Route path="/tv-shows" element={<TvShows />} />
-            <Route path="/tv-shows/:id" element={<TVShowDetails />} />
-            <Route path="/actors/:id" element={<ActorDetails />} />
-            <Route path="/favorites" element={<Favorites />} />
-            <Route path="/actors" element={<Actors />} />
-            <Route path="/register" element={<Register />} />
-            <Route path="/login" element={<Login />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
+              <Route path="/" element={<Home />} />
+              <Route path="/tv-shows" element={<TvShows />} />
+              <Route path="/tv-shows/:id" element={<TVShowDetails />} />
+              <Route path="/actors/:id" element={<ActorDetails />} />
+              <Route path="/favorites" element={<Favorites />} />
+              <Route path="/actors" element={<Actors />} />
+              <Route path="/register" element={<Register />} />
+              <Route path="/login" element={<Login />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
-          <Toaster position="bottom-right" />
-        </div>
-      </Router>
+            <Toaster position="bottom-right" />
+          </div>
+        </Router>
+      </ImageProvider>
     </AuthProvider>
   );
 }

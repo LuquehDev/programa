@@ -1,7 +1,17 @@
-import { Link, Navigate, useLocation } from "react-router-dom";
+import { Navigate, useLocation } from "react-router-dom";
 import { useEffect, useMemo, useState } from "react";
-import { Play, Eye, Star, Calendar, Tag, ChevronLeft, ChevronRight } from "lucide-react";
+import {
+  Play,
+  Star,
+  Calendar,
+  Tag,
+  ChevronLeft,
+  ChevronRight,
+  Download,
+  FileText,
+} from "lucide-react";
 import { useAuth } from "@/lib/auth";
+import Card from "@/auth/components/Card";
 
 type Genre = { id: string; name: string };
 type TVShow = {
@@ -22,88 +32,257 @@ export default function TVShowList() {
   const { isAuthenticated, user } = useAuth();
   const loc = useLocation();
 
-  const [payload, setPayload] = useState<TVShow[]>([]);
+  const [items, setItems] = useState<TVShow[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
+
   const [page, setPage] = useState(1);
-
-  const [favBusy, setFavBusy] = useState<string | null>(null);
   const [favIds, setFavIds] = useState<Set<string>>(new Set());
+  const [favBusy, setFavBusy] = useState<string | null>(null);
 
-  if (!isAuthenticated) {
+  // filtros
+  const [search, setSearch] = useState("");
+  const [genreFilter, setGenreFilter] = useState("");
+  const [typeFilter, setTypeFilter] = useState("");
+
+  if (!isAuthenticated)
     return <Navigate to="/login" replace state={{ from: loc }} />;
-  }
 
-  // 1) Carrega TODOS os TV Shows
   useEffect(() => {
-    (async () => {
+    async function load() {
       try {
         setLoading(true);
         setErr(null);
         const res = await fetch(`${API_BASE}/tv-shows`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = (await res.json()) as TVShow[];
-        setPayload(Array.isArray(data) ? data : []);
+        setItems(Array.isArray(data) ? data : []);
       } catch (e: any) {
         setErr(e?.message ?? "Erro ao carregar TV shows");
+        setItems([]);
       } finally {
         setLoading(false);
       }
-    })();
+    }
+    load();
   }, []);
 
-  // 2) Carrega SOMENTE os IDs favoritos do user
   useEffect(() => {
     if (!user?.id) return;
-    (async () => {
+    async function loadFavs() {
       try {
-        const res = await fetch(`${API_BASE}/users/${user.id}/favorites-ids`);
+        const res = await fetch(`${API_BASE}/users/${user?.id}/favorites-ids`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const ids = (await res.json()) as string[];
         setFavIds(new Set(ids));
-      } catch (e) {
-        console.log("Falhou carregar favoritos:", (e as any)?.message);
-        setFavIds(new Set()); // sem quebrar UI
+      } catch {
+        setFavIds(new Set());
       }
-    })();
+    }
+    loadFavs();
   }, [user?.id]);
 
-  // 3) POST pra marcar favorito (NÃO filtra a lista principal)
-  const addFavorite = async (tvShowId: string) => {
-    if (!user?.id) {
-      setErr("Não foi possível identificar o utilizador.");
-      return;
+  async function sendRecommendationsEmail(userId: string) {
+    try {
+      const res = await fetch(
+        `${API_BASE}/users/${userId}/recommendations-email`,
+        { method: "POST" }
+      );
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    } catch (e) {
+      console.log("Erro: ", e);
     }
+  }
+
+  async function addFavorite(tvShowId: string) {
+    if (!user?.id) return setErr("Não foi possível identificar o utilizador.");
     try {
       setFavBusy(tvShowId);
-      const res = await fetch(`${API_BASE}/users/${user.id}/favorites/${tvShowId}`, {
-        method: "POST",
-      });
+      const res = await fetch(
+        `${API_BASE}/users/${user.id}/favorites/${tvShowId}`,
+        { method: "POST" }
+      );
       if (!res.ok && res.status !== 204) throw new Error(`HTTP ${res.status}`);
-      setFavIds(prev => new Set(prev).add(tvShowId)); // só pinta a estrela
+      setFavIds((prev) => new Set(prev).add(tvShowId));
+      sendRecommendationsEmail(user.id);
     } catch (e: any) {
       setErr(e?.message ?? "Não foi possível adicionar aos favoritos");
     } finally {
       setFavBusy(null);
     }
-  };
+  }
 
-  // Paginação — SEM filtrar por favoritos
-  const total = payload.length;
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  async function removeFavorite(tvShowId: string) {
+    if (!user?.id) return setErr("Não foi possível identificar o utilizador.");
+    try {
+      setFavBusy(tvShowId);
+      const res = await fetch(
+        `${API_BASE}/users/${user.id}/favorites/${tvShowId}`,
+        { method: "DELETE" }
+      );
+      if (!res.ok && res.status !== 204) throw new Error(`HTTP ${res.status}`);
+      setFavIds((prev) => {
+        const next = new Set(prev);
+        next.delete(tvShowId);
+        return next;
+      });
+    } catch (e: any) {
+      setErr(e?.message ?? "Não foi possível remover dos favoritos");
+    } finally {
+      setFavBusy(null);
+    }
+  }
 
-  useEffect(() => {
-    setPage(p => Math.min(Math.max(1, p), totalPages));
-  }, [totalPages]);
+  // todos os géneros
+  const allGenres = useMemo(() => {
+    const set = new Set<string>();
+    items.forEach((s) => s.genres?.forEach((g) => set.add(g.name)));
+    return Array.from(set).sort();
+  }, [items]);
 
+  // todos os types
+  const allTypes = useMemo(() => {
+    const set = new Set<string>();
+    items.forEach((s) => s.type && set.add(s.type));
+    return Array.from(set).sort();
+  }, [items]);
+
+  // aplicar filtros + ordenar
+  const filteredItems = useMemo(() => {
+    let result = items;
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      result = result.filter((s) => s.title.toLowerCase().includes(q));
+    }
+    if (genreFilter) {
+      result = result.filter((s) =>
+        s.genres?.some((g) => g.name === genreFilter)
+      );
+    }
+    if (typeFilter) {
+      result = result.filter((s) => s.type === typeFilter);
+    }
+    return result.slice().sort((a, b) => a.title.localeCompare(b.title));
+  }, [items, search, genreFilter, typeFilter]);
+
+  const total = filteredItems.length;
+  const totalPages = useMemo(
+    () => Math.max(1, Math.ceil(total / PAGE_SIZE)),
+    [total]
+  );
   const pageItems = useMemo(() => {
     const start = (page - 1) * PAGE_SIZE;
-    return payload.slice(start, start + PAGE_SIZE);
-  }, [payload, page]);
+    return filteredItems.slice(start, start + PAGE_SIZE);
+  }, [filteredItems, page]);
 
-  const goPrev = () => setPage(p => Math.max(1, p - 1));
-  const goNext = () => setPage(p => Math.min(totalPages, p + 1));
-  const goTo   = (p: number) => setPage(p);
+  useEffect(() => {
+    setPage(1);
+  }, [search, genreFilter, typeFilter]);
+
+  useEffect(() => {
+    setPage((p) => Math.min(Math.max(1, p), totalPages));
+  }, [totalPages]);
+
+  // -------- Export helpers --------
+  function toCSV(rows: TVShow[]) {
+    const esc = (v: unknown) => {
+      const s = v == null ? "" : String(v);
+      const needs = /[",\n]/.test(s);
+      return needs ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const header = [
+      "id",
+      "title",
+      "type",
+      "releaseYear",
+      "genres",
+      "rating",
+      "description",
+    ];
+    const lines = [
+      header.join(","),
+      ...rows.map((r) =>
+        [
+          r.id,
+          r.title,
+          r.type ?? "",
+          r.releaseYear ?? "",
+          r.genres?.map((g) => g.name).join("|") ?? "",
+          r.rating ?? "",
+          r.description ?? "",
+        ]
+          .map(esc)
+          .join(",")
+      ),
+    ];
+    return lines.join("\n");
+  }
+
+  function downloadBlob(content: BlobPart, filename: string, type: string) {
+    const blob = new Blob([content], { type });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  function handleExportCSV() {
+    const csv = toCSV(filteredItems);
+    const ts = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+    downloadBlob(csv, `STtv-shows-${ts}.csv`, "text/csv;charset=utf-8");
+  }
+
+  function handleExportPDF() {
+    const win = window.open("", "_blank");
+    if (!win) return;
+    const rows = filteredItems
+      .map(
+        (s) => `
+        <tr>
+          <td>${s.id}</td>
+          <td>${s.title}</td>
+          <td>${s.type ?? ""}</td>
+          <td>${s.releaseYear ?? ""}</td>
+          <td>${s.genres?.map((g) => g.name).join(", ") ?? ""}</td>
+          <td>${s.rating ?? ""}</td>
+          <td>${s.description ? s.description.replace(/</g, "&lt;") : ""}</td>
+        </tr>`
+      )
+      .join("");
+
+    win.document.write(`<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>TV Shows</title>
+<style>
+  body { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial; padding: 24px; }
+  h1 { font-size: 20px; margin: 0 0 12px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th, td { border: 1px solid #ddd; padding: 8px; vertical-align: top; }
+  th { background: #f3f4f6; text-align: left; }
+</style>
+</head>
+<body>
+  <h1>TV Shows — ${filteredItems.length} registos</h1>
+  <table>
+    <thead>
+      <tr><th>ID</th><th>Title</th><th>Type</th><th>Year</th><th>Genres</th><th>Rating</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      ${rows || `<tr><td colspan="7">Sem dados</td></tr>`}
+    </tbody>
+  </table>
+  <script>window.onload = () => { window.print(); setTimeout(() => window.close(), 300); };</script>
+</body>
+</html>`);
+    win.document.close();
+  }
+  // ---------------------------------
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 relative overflow-hidden">
@@ -127,10 +306,69 @@ export default function TVShowList() {
           </p>
         </div>
 
+        {/* filtros + export à direita */}
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+          <div className="flex flex-col md:flex-row md:flex-wrap gap-4 items-start">
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Filter by name"
+              className="px-3 py-2 border rounded-lg w-full md:w-64"
+            />
+
+            <select
+              value={genreFilter}
+              onChange={(e) => setGenreFilter(e.target.value)}
+              className="px-3 py-2 border rounded-lg w-full md:w-56"
+            >
+              <option value="">All genres</option>
+              {allGenres.map((g) => (
+                <option key={g} value={g}>
+                  {g}
+                </option>
+              ))}
+            </select>
+
+            <select
+              value={typeFilter}
+              onChange={(e) => setTypeFilter(e.target.value)}
+              className="px-3 py-2 border rounded-lg w-full md:w-40"
+            >
+              <option value="">All types</option>
+              {allTypes.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex gap-2 self-start md:self-auto">
+            <button
+              onClick={handleExportCSV}
+              className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 bg-white hover:bg-gray-50"
+              aria-label="Export filtered data as CSV"
+            >
+              <Download size={16} /> Export CSV
+            </button>
+            <button
+              onClick={handleExportPDF}
+              className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 bg-white hover:bg-gray-50"
+              aria-label="Export filtered data as PDF"
+            >
+              <FileText size={16} /> Export PDF
+            </button>
+          </div>
+        </div>
+
         {loading && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
             {Array.from({ length: PAGE_SIZE }).map((_, i) => (
-              <div key={i} className="h-72 bg-white/60 backdrop-blur-sm rounded-2xl shadow animate-pulse border border-gray-100/50" />
+              <div
+                key={i}
+                className="h-72 bg-white/60 backdrop-blur-sm rounded-2xl shadow animate-pulse border border-gray-100/50"
+              />
             ))}
           </div>
         )}
@@ -144,87 +382,69 @@ export default function TVShowList() {
         {!loading && !err && (
           <>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
-              {pageItems.map(show => {
+              {pageItems.map((show) => {
                 const isFav = favIds.has(show.id);
                 const isBusy = favBusy === show.id;
+                const kind =
+                  show.type === "movie"
+                    ? "movie"
+                    : show.type === "series"
+                    ? "series"
+                    : "any";
 
                 return (
-                  <Link
+                  <Card
                     key={show.id}
                     to={`/tv-shows/${show.id}`}
-                    className="group relative bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-500 overflow-hidden transform hover:scale-105 hover:-translate-y-2 border border-gray-100/50"
-                  >
-                    {/* Estrela: pinta se estiver nos favoritos */}
-                    <button
-                      type="button"
-                      aria-label={isFav ? "Nos favoritos" : "Adicionar aos favoritos"}
-                      title={isFav ? "Nos favoritos" : "Adicionar aos favoritos"}
-                      onClick={e => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        if (!isBusy && !isFav) addFavorite(show.id);
-                      }}
-                      className={`absolute top-4 right-4 z-10 w-10 h-10 rounded-full flex items-center justify-center shadow
-                        bg-white/90 
-                        ${isBusy ? "opacity-60 cursor-wait" : "cursor-pointer"}`}
-                    >
-                      <Star
-                        size={20}
-                        className={`drop-shadow transition-all duration-200 ${isFav ? "text-yellow-400" : "text-yellow-500"}`}
-                        fill={isFav ? "currentColor" : "none"}
-                      />
-                    </button>
-
-                    <div className="aspect-video overflow-hidden relative">
-                      <img
-                        src={show.image || "https://via.placeholder.com/640x360?text=TV+Show"}
-                        alt={show.title}
-                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-                      />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-                      <div className="absolute top-4 right-16 w-10 h-10 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-y-2 group-hover:translate-y-0">
-                        <Eye className="text-white" size={18} />
-                      </div>
-                    </div>
-
-                    <div className="p-6 relative">
-                      <h3 className="text-xl font-bold text-gray-900 mb-3 group-hover:bg-gradient-to-r group-hover:from-blue-600 group-hover:to-purple-600 group-hover:bg-clip-text group-hover:text-transparent transition-all duration-300">
-                        {show.title}
-                      </h3>
-
-                      <div className="space-y-3 mb-4">
-                        <div className="flex items-center text-sm text-gray-600 bg-gray-50 rounded-lg px-3 py-2">
-                          <Calendar size={16} className="mr-2 text-blue-500" />
-                          <span>{show.releaseYear ?? "—"}</span>
-                        </div>
-
-                        <div className="flex items-center text-sm text-gray-600 bg-gray-50 rounded-lg px-3 py-2">
-                          <Tag size={16} className="mr-2 text-purple-500" />
-                          <span>{show.genres && show.genres.length > 0 ? show.genres.map(g => g.name).join(", ") : "—"}</span>
-                        </div>
-
-                        <div className="flex items-center text-sm text-yellow-600 bg-yellow-50 rounded-lg px-3 py-2">
-                          <Star size={16} className="mr-2 fill-current animate-pulse" />
-                          <span className="font-semibold">{show.rating ?? "—"}</span>
-                        </div>
-                      </div>
-
-                      <p className="text-gray-600 text-sm line-clamp-3 leading-relaxed">
-                        {show.description ?? "No description available."}
-                      </p>
-                    </div>
-                  </Link>
+                    aspect="video"
+                    title={show.title}
+                    image={show.image}
+                    poster={{ title: show.title, year: show.releaseYear, kind }}
+                    description={
+                      show.description ?? "No description available."
+                    }
+                    meta={[
+                      {
+                        icon: <Calendar size={16} className="text-blue-500" />,
+                        text: String(show.releaseYear ?? "—"),
+                      },
+                      {
+                        icon: <Tag size={16} className="text-purple-500" />,
+                        text: show.genres?.length
+                          ? show.genres.map((g) => g.name).join(", ")
+                          : "—",
+                      },
+                      {
+                        icon: (
+                          <Star
+                            size={16}
+                            className="fill-current text-yellow-500"
+                          />
+                        ),
+                        text: String(show.rating ?? "—"),
+                        className: "bg-yellow-50 text-yellow-700",
+                      },
+                    ]}
+                    favorite={{
+                      isFav,
+                      isBusy,
+                      onToggle: () =>
+                        isFav ? removeFavorite(show.id) : addFavorite(show.id),
+                      ariaLabel: isFav
+                        ? "Remover dos favoritos"
+                        : "Adicionar aos favoritos",
+                    }}
+                  />
                 );
               })}
             </div>
 
-            {/* Paginação certinha */}
+            {/* paginação */}
             <div className="mt-10 flex items-center justify-center gap-2">
               <button
-                onClick={goPrev}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={page === 1}
                 className="inline-flex items-center gap-1 px-3 py-2 rounded-lg border border-gray-200 bg-white disabled:opacity-50"
-                aria-label="Previous page"
               >
                 <ChevronLeft size={16} /> Prev
               </button>
@@ -232,21 +452,16 @@ export default function TVShowList() {
               <div className="flex items-center gap-1">
                 {Array.from({ length: totalPages }).map((_, i) => {
                   const p = i + 1;
-                  const isEdge = p === 1 || p === totalPages;
-                  const isNear = Math.abs(p - page) <= 1;
-                  if (!(isEdge || isNear)) {
-                    if (p === 2 && page > 3) return <span key={p}>…</span>;
-                    if (p === totalPages - 1 && page < totalPages - 2) return <span key={p}>…</span>;
-                    return null;
-                  }
                   const active = p === page;
                   return (
                     <button
                       key={p}
-                      onClick={() => goTo(p)}
-                      className={`w-9 h-9 rounded-lg border text-sm ${active
-                        ? "bg-gradient-to-r from-blue-600 to-purple-600 text-white border-transparent"
-                        : "border-gray-200"}`}
+                      onClick={() => setPage(p)}
+                      className={`w-9 h-9 rounded-lg border text-sm ${
+                        active
+                          ? "bg-gradient-to-r from-blue-600 to-purple-600 text-white border-transparent"
+                          : "border-gray-200"
+                      }`}
                     >
                       {p}
                     </button>
@@ -255,10 +470,9 @@ export default function TVShowList() {
               </div>
 
               <button
-                onClick={goNext}
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                 disabled={page === totalPages}
                 className="inline-flex items-center gap-1 px-3 py-2 rounded-lg border border-gray-200 disabled:opacity-50"
-                aria-label="Next page"
               >
                 Next <ChevronRight size={16} />
               </button>
@@ -266,7 +480,8 @@ export default function TVShowList() {
 
             <p className="mt-3 text-center text-sm text-gray-600">
               Page <span className="font-semibold">{page}</span> of{" "}
-              <span className="font-semibold">{totalPages}</span> — {total} item{total === 1 ? "" : "s"}
+              <span className="font-semibold">{totalPages}</span> — {total} item
+              {total === 1 ? "" : "s"}
             </p>
           </>
         )}

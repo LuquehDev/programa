@@ -247,3 +247,11 @@ C:\Users\Luiz Paiva\Desktop\DesafioTekever\programa\api\TvTracker.Api\obj\Debug\
 C:\Users\Luiz Paiva\Desktop\DesafioTekever\programa\api\TvTracker.Api\obj\Debug\net8.0\TvTracker.Api.genruntimeconfig.cache
 C:\Users\Luiz Paiva\Desktop\DesafioTekever\programa\api\TvTracker.Api\obj\Debug\net8.0\ref\TvTracker.Api.dll
 C:\Users\Luiz Paiva\Desktop\DesafioTekever\programa\api\TvTracker.Api\obj\Debug\net8.0\TvTracker.Api.sourcelink.json
+C:\Users\Luiz Paiva\Desktop\DesafioTekever\programa\api\TvTracker.Api\bin\Debug\net8.0\BouncyCastle.Cryptography.dll
+C:\Users\Luiz Paiva\Desktop\DesafioTekever\programa\api\TvTracker.Api\bin\Debug\net8.0\MailKit.dll
+C:\Users\Luiz Paiva\Desktop\DesafioTekever\programa\api\TvTracker.Api\bin\Debug\net8.0\MimeKit.dll
+C:\Users\Luiz Paiva\Desktop\DesafioTekever\programa\api\TvTracker.Api\bin\Debug\net8.0\System.Security.Cryptography.Pkcs.dll
+C:\Users\Luiz Paiva\Desktop\DesafioTekever\programa\api\TvTracker.Api\bin\Debug\net8.0\runtimes\win\lib\net8.0\System.Security.Cryptography.Pkcs.dll
+C:\Users\Luiz Paiva\Desktop\DesafioTekever\programa\api\TvTracker.Api\bin\Debug\net8.0\Newtonsoft.Json.dll
+C:\Users\Luiz Paiva\Desktop\DesafioTekever\programa\api\TvTracker.Api\bin\Debug\net8.0\SendGrid.dll
+C:\Users\Luiz Paiva\Desktop\DesafioTekever\programa\api\TvTracker.Api\bin\Debug\net8.0\StarkbankEcdsa.dll

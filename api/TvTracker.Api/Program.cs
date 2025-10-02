@@ -6,6 +6,8 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
 using TvTracker.Data;
+using SendGrid;
+using SendGrid.Helpers.Mail;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -60,6 +62,7 @@ builder.Services
     });
 
 builder.Services.AddAuthorization();
+builder.Services.AddScoped<EmailService>();
 
 // ============== Swagger ==============
 builder.Services.AddEndpointsApiExplorer();
@@ -82,26 +85,6 @@ app.UseAuthorization();
 
 
 // ========================== AUTH =============================
-
-// ========== Email ==========
-app.MapGet("/auth/me", async (ClaimsPrincipal principal, AppDbContext db) =>
-{
-    var sub = principal.FindFirstValue(JwtRegisteredClaimNames.Sub);
-    if (sub is null) return Results.Unauthorized();
-
-    if (!Guid.TryParse(sub, out var userId)) return Results.Unauthorized();
-    var u = await db.Users.FindAsync(userId);
-    if (u is null) return Results.Unauthorized();
-
-    return Results.Ok(new
-    {
-        id = u.Id,
-        email = u.Email,
-        displayName = u.DisplayName,
-        isAdmin = u.IsAdmin,
-        emailVerified = u.EmailVerified
-    });
-}).RequireAuthorization();
 
 // ========== Register ==========
 app.MapPost("/auth/register", async (
@@ -219,12 +202,26 @@ app.MapPost("/auth/login", async (
     });
 });
 
-
 // ========================== ROTAS SIMPLES ========================
 
 app.MapGet("/actors", async ([FromServices] AppDbContext db) =>
     await db.Actors
     .Select(x => new { x.Id, x.FullName, x.Age, x.Nationality, x.Introduction })
+    .ToListAsync());
+
+app.MapGet("/tv-shows", async ([FromServices] AppDbContext db) =>
+await db.TvShows
+    .Include(x => x.TvShowGenres)
+    .ThenInclude(tg => tg.Genre)
+    .Select(x => new
+    {
+        x.Id,
+        x.Title,
+        x.Description,
+        x.Type,
+        x.ReleaseYear,
+        genres = x.TvShowGenres.Select(tg => new { tg.Genre.Id, tg.Genre.Name }).ToList()
+    })
     .ToListAsync());
 
 // ===================== ACTOR: DETALHES + TV SHOWS =====================
@@ -238,7 +235,6 @@ app.MapGet("/actor/{id:guid}/details", async (
         .Where(a => a.Id == id)
         .Select(a => new
         {
-            // Detalhes do actor
             a.Id,
             FullName = a.FullName,
             a.Nationality,
@@ -247,7 +243,6 @@ app.MapGet("/actor/{id:guid}/details", async (
             a.CreatedAt,
             a.UpdatedAt,
 
-            // TV Shows onde participou, ordenados por billing
             TvShows = a.TvShowActors
                 .OrderBy(t => t.Billing)
                 .Select(t => new
@@ -271,52 +266,6 @@ app.MapGet("/actor/{id:guid}/details", async (
         : Results.Ok(actor);
 });
 
-app.MapGet("/roles", async ([FromServices] AppDbContext db) =>
-    await db.Roles.ToListAsync());
-
-app.MapGet("/users", async ([FromServices] AppDbContext db) =>
-    await db.Users.ToListAsync());
-
-// ========================== TV SHOWS ========================
-
-app.MapGet("/tv-shows", async ([FromServices] AppDbContext db) =>
-    await db.TvShows
-        .Include(x => x.TvShowGenres)
-        .ThenInclude(tg => tg.Genre)
-        .Select(x => new
-        {
-            x.Id,
-            x.Title,
-            x.Description,
-            x.Type,
-            x.ReleaseYear,
-            genres = x.TvShowGenres.Select(tg => new { tg.Genre.Id, tg.Genre.Name }).ToList()
-        })
-        .ToListAsync());
-
-app.MapGet("/tv-show/{id:guid}/genres", async (Guid id, [FromServices] AppDbContext db) =>
-    await db.TvShowGenres
-        .Where(x => x.TvShowId == id)
-        .Include(x => x.Genre)
-        .Select(x => new { x.Genre.Id, x.Genre.Name })
-        .ToListAsync());
-
-app.MapGet("/tv-show/{id:guid}/episodes", async (Guid id, [FromServices] AppDbContext db) =>
-        await db.Episodes
-        .Where(x => x.TvShowId == id)
-        .OrderBy(x => x.ReleaseDate)
-        .Select(x => new { TvShowId = x.TvShow.Id, x.EpisodeNumber, x.SeasonNumber, x.Title, x.Synopsis, x.ReleaseDate })
-        .ToListAsync());
-
-app.MapGet("/tv-show/{id:guid}/casts", async (Guid id, [FromServices] AppDbContext db) =>
-    await db.TvShowActors
-        .AsSplitQuery()
-        .Where(x => x.TvShowId == id)
-        .Include(x => x.Actor)
-        .OrderBy(x => x.Billing)
-        .Select(x => new { x.Actor.Id, x.Actor.FullName, x.Billing })
-        .ToListAsync());
-
 // ===================== TV SHOW: DETALHES + CAST =====================
 app.MapGet("/tv-show/{id:guid}/details", async (
     Guid id,
@@ -325,6 +274,7 @@ app.MapGet("/tv-show/{id:guid}/details", async (
 {
     var show = await db.TvShows
         .AsNoTracking()
+        .AsSplitQuery()
         .Where(s => s.Id == id)
         .Select(s => new
         {
@@ -351,6 +301,21 @@ app.MapGet("/tv-show/{id:guid}/details", async (
                     t.Actor.BirthDate,
                     t.Actor.Introduction
                 })
+                .ToList(),
+
+            Episodes = s.Episodes
+                .OrderBy(e => e.SeasonNumber)
+                .ThenBy(e => e.EpisodeNumber)
+                .ThenBy(e => e.ReleaseDate)
+                .Select(e => new
+                {
+                    id = e.Id,
+                    title = e.Title,
+                    season = e.SeasonNumber,
+                    number = e.EpisodeNumber,
+                    airDate = e.ReleaseDate,
+                    overview = e.Synopsis
+                })
                 .ToList()
         })
         .SingleOrDefaultAsync(ct);
@@ -374,12 +339,10 @@ app.MapPost("/users/{userId}/favorites/{tvShowId}", async (
     if (!Guid.TryParse(tvShowId, out var showGuid))
         return Results.BadRequest(new { error = "tvShowId inválido (GUID esperado)." });
 
-    // existe o show?
     var existsShow = await db.TvShows.AsNoTracking().AnyAsync(s => s.Id == showGuid, ct);
     if (!existsShow)
         return Results.NotFound(new { error = "TV Show não encontrado." });
 
-    // já é favorito?
     var existsFav = await db.Favorites.AnyAsync(f => f.UserId == userGuid && f.TvShowId == showGuid, ct);
     if (existsFav) return Results.NoContent();
 
@@ -394,7 +357,6 @@ app.MapPost("/users/{userId}/favorites/{tvShowId}", async (
     return Results.Created($"/users/{userGuid}/favorites/{showGuid}", new { tvShowId = showGuid });
 });
 
-// IDs dos favoritos de um user (simples)
 app.MapGet("/users/{userId}/favorites-ids", async (
     string userId,
     AppDbContext db,
@@ -412,7 +374,6 @@ app.MapGet("/users/{userId}/favorites-ids", async (
     return Results.Ok(ids);
 });
 
-// DELETE /users/{userId}/favorites/{tvShowId}
 app.MapDelete("/users/{userId}/favorites/{tvShowId}", async (
     string userId,
     string tvShowId,
@@ -428,13 +389,98 @@ app.MapDelete("/users/{userId}/favorites/{tvShowId}", async (
     var fav = await db.Favorites
         .FirstOrDefaultAsync(f => f.UserId == userGuid && f.TvShowId == showGuid, ct);
 
-    if (fav is null) return Results.NoContent(); // idempotente
+    if (fav is null) return Results.NoContent();
 
     db.Favorites.Remove(fav);
     await db.SaveChangesAsync(ct);
     return Results.NoContent();
 });
 
+// ===================== RECOMENDAÇÕES POR GÉNEROS + EMAIL =====================
+app.MapPost("/users/{userId}/recommendations-email", async (
+    string userId,
+    AppDbContext db,
+    EmailService emailService,
+    CancellationToken ct) =>
+{
+    if (!Guid.TryParse(userId, out var uid))
+        return Results.BadRequest(new { error = "userId inválido (GUID esperado)." });
+
+    var user = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == uid, ct);
+    if (user is null) return Results.NotFound(new { error = "Utilizador não encontrado." });
+
+    var favShowIds = await db.Favorites
+        .Where(f => f.UserId == uid)
+        .Select(f => f.TvShowId)
+        .ToListAsync(ct);
+    if (favShowIds.Count == 0)
+        return Results.BadRequest(new { error = "Utilizador sem favoritos." });
+
+    var favGenreIds = await db.TvShowGenres
+        .Where(tg => favShowIds.Contains(tg.TvShowId))
+        .Select(tg => tg.GenreId)
+        .Distinct()
+        .ToListAsync(ct);
+    if (favGenreIds.Count == 0)
+        return Results.BadRequest(new { error = "Favoritos sem géneros associados." });
+
+    var candidates = await db.TvShowGenres
+        .Where(tg => favGenreIds.Contains(tg.GenreId) && !favShowIds.Contains(tg.TvShowId))
+        .GroupBy(tg => tg.TvShowId)
+        .Select(g => new { TvShowId = g.Key, Overlap = g.Count() })
+        .OrderByDescending(x => x.Overlap)
+        .Take(100)
+        .ToListAsync(ct);
+    if (candidates.Count == 0)
+        return Results.BadRequest(new { error = "Sem recomendações com base nos géneros dos favoritos." });
+
+    var candidateIds = candidates.Select(c => c.TvShowId).ToList();
+    var shows = await db.TvShows
+        .Where(s => candidateIds.Contains(s.Id))
+        .Select(s => new
+        {
+            s.Id,
+            s.Title,
+            s.Description,
+            s.Type,
+            s.ReleaseYear,
+            Genres = s.TvShowGenres.Select(tg => new { tg.Genre.Id, tg.Genre.Name }).ToList()
+        })
+        .ToListAsync(ct);
+
+    var overlapMap = candidates.ToDictionary(x => x.TvShowId, x => x.Overlap);
+    var ordered = shows.OrderByDescending(s => overlapMap[s.Id]).ThenBy(s => s.Title).ToList();
+
+    var plainLines = new List<string>
+    {
+        $"Recommendations based on your favorites ({ordered.Count} results)",
+        ""
+    };
+    foreach (var s in ordered.Take(25))
+    {
+        var overlap = overlapMap[s.Id];
+        var genres = string.Join(", ", s.Genres.Select(g => g.Name).OrderBy(n => n));
+        plainLines.Add($"• {s.Title} ({s.ReleaseYear}) — genres: {genres} — affinity: {overlap}");
+    }
+    var bodyText = string.Join(Environment.NewLine, plainLines);
+
+    var htmlSb = new StringBuilder()
+        .Append("<h2>Recommendations based on your favorites</h2>")
+        .Append($"<p>Total: <b>{ordered.Count}</b></p>")
+        .Append("<ol>");
+    foreach (var s in ordered.Take(25))
+    {
+        var overlap = overlapMap[s.Id];
+        var genres = string.Join(", ", s.Genres.Select(g => g.Name).OrderBy(n => n));
+        htmlSb.Append($"<li><b>{System.Net.WebUtility.HtmlEncode(s.Title)}</b> ({s.ReleaseYear}) — genres: {System.Net.WebUtility.HtmlEncode(genres)} — affinity: {overlap}</li>");
+    }
+    htmlSb.Append("</ol>");
+    var bodyHtml = htmlSb.ToString();
+
+    await emailService.EnviarEmailAsync(user.Email, user.DisplayName, bodyText, bodyHtml);
+
+    return Results.Ok(new { sentTo = user.Email, count = ordered.Count });
+});
 
 app.Run();
 

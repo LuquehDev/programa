@@ -1,7 +1,10 @@
 import { useEffect, useState } from "react";
 import { useParams, Link, Navigate, useLocation } from "react-router-dom";
-import { ArrowLeft, Star, Calendar, Tag, Users } from "lucide-react";
+import { ArrowLeft, Star, Calendar, Tag, Users, Film } from "lucide-react";
 import { useAuth } from "@/lib/auth";
+import Card from "@/auth/components/Card";
+import MainCard from "@/auth/components/MainCard";
+import { useImages } from "@/auth/components/ImageProvider";
 
 type Genre = { id: string; name: string };
 type CastItem = {
@@ -13,17 +16,31 @@ type CastItem = {
   introduction?: string | null;
 };
 
+type EpisodeDto = {
+  id?: string;
+  title: string;
+  season?: number | null;
+  number?: number | null;
+  runtimeMin?: number | null;
+  airDate?: string | null;
+  overview?: string | null;
+  // formatos alternativos do endpoint:
+  EpisodeNumber?: number | null;
+  SeasonNumber?: number | null;
+  Title?: string | null;
+  Synopsis?: string | null;
+  ReleaseDate?: string | null;
+};
+
 type ApiShowDetails = {
   id: string;
   title: string;
   description?: string | null;
   type?: string | null;
   releaseYear?: number | null;
-  createdAt?: string;
-  updatedAt?: string;
   genres?: Genre[];
   cast: CastItem[];
-  // episodes?: { id: string; seasonNumber: number; episodeNumber: number; title: string; releaseDate?: string | null }[]; // se adicionares no backend
+  episodes?: EpisodeDto[];
 };
 
 const API_BASE = "http://localhost:30120";
@@ -39,26 +56,34 @@ function calcAge(birthDate?: string | null): number | null {
   return Math.max(0, age);
 }
 
+function normEp(x: EpisodeDto, idx: number) {
+  const season = x.season ?? x.SeasonNumber ?? null;
+  const number = x.number ?? x.EpisodeNumber ?? null;
+  return {
+    id: String(x.id ?? `${season ?? 0}-${number ?? idx}-${x.title ?? x.Title ?? "ep"}`),
+    title: String(x.title ?? x.Title ?? "Episode"),
+    season,
+    number,
+    runtimeMin: x.runtimeMin ?? null,
+    airDate: x.airDate ?? x.ReleaseDate ?? null,
+    overview: x.overview ?? x.Synopsis ?? null,
+  };
+}
+
 export default function TVShowDetails() {
   const { isAuthenticated } = useAuth();
   const loc = useLocation();
   const { id } = useParams<{ id: string }>();
+  const { getPosterOrFallback } = useImages();
 
   const [data, setData] = useState<ApiShowDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
-
-  if (!isAuthenticated) {
-    return <Navigate to="/login" replace state={{ from: loc }} />;
-  }
-
-  useEffect(() => {
-    console.log("ID DO TVSHOW: ", id);
-  }, [id]);
+  const [posterUrl, setPosterUrl] = useState<string>("");
 
   useEffect(() => {
     let abort = false;
-    const run = async () => {
+    async function run() {
       try {
         setLoading(true);
         setErr(null);
@@ -74,27 +99,79 @@ export default function TVShowDetails() {
       } finally {
         if (!abort) setLoading(false);
       }
-    };
+    }
     if (id) run();
-    return () => {
-      abort = true;
-    };
+    return () => { abort = true; };
   }, [id]);
+
+  // Resolve a CAPA UMA VEZ e reutiliza em tudo
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      if (!data) return;
+      const kind = data.type === "movie" ? "movie" : data.type === "series" ? "series" : "any";
+      const url = await getPosterOrFallback({ title: data.title, year: data.releaseYear ?? undefined, kind });
+      if (alive) setPosterUrl(url);
+    })();
+    return () => { alive = false; };
+  }, [data, getPosterOrFallback]);
+
+  // Se details não trouxer episódios, buscar do endpoint dedicado e normalizar
+  const [episodes, setEpisodes] = useState<ReturnType<typeof normEp>[]>([]);
+  const [epsLoading, setEpsLoading] = useState(false);
+  const [epsErr, setEpsErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    if (!data?.id) return;
+
+    async function loadEpisodes() {
+      try {
+        setEpsLoading(true);
+        setEpsErr(null);
+
+        let list: EpisodeDto[] = Array.isArray(data?.episodes) ? data.episodes : [];
+        if (!list.length) {
+          const r = await fetch(`${API_BASE}/tv-show/${data?.id}/episodes`);
+          if (!r.ok) throw new Error(`HTTP ${r.status}`);
+          const raw = (await r.json()) as EpisodeDto[];
+          list = Array.isArray(raw) ? raw : [];
+        }
+
+        const mapped = list.map((e, i) => normEp(e, i));
+        mapped.sort((a, b) => {
+          const sa = a.season ?? 0, sb = b.season ?? 0;
+          if (sa !== sb) return sa - sb;
+          const na = a.number ?? 0, nb = b.number ?? 0;
+          return na - nb;
+        });
+
+        if (alive) setEpisodes(mapped);
+      } catch (e: any) {
+        if (alive) { setEpsErr(e?.message ?? "Falha ao obter episódios"); setEpisodes([]); }
+      } finally {
+        if (alive) setEpsLoading(false);
+      }
+    }
+
+    loadEpisodes();
+    return () => { alive = false; };
+  }, [data?.id, data?.episodes]);
+
+  if (!isAuthenticated) return <Navigate to="/login" replace state={{ from: loc }} />;
 
   if (!loading && (err || !data)) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
-          <h2 className="text-2xl font-bold text-gray-900 mb-4">
-            {err ?? "Show Not Found"}
-          </h2>
-          <Link to="/tv-shows" className="text-blue-600 hover:text-blue-700">
-            Voltar à lista
-          </Link>
+          <h2 className="text-2xl font-bold text-gray-900 mb-4">{err ?? "Show Not Found"}</h2>
+          <Link to="/tv-shows" className="text-blue-600 hover:text-blue-700">Voltar à lista</Link>
         </div>
       </div>
     );
   }
+
+  const kind = data?.type === "movie" ? "movie" : data?.type === "series" ? "series" : "any";
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -122,117 +199,82 @@ export default function TVShowDetails() {
           </div>
         )}
 
+        {/* Conteúdo */}
         {!loading && data && (
           <>
-            <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
-              <div className="md:flex">
-                <div className="md:w-1/3">
-                  <img
-                    src={"https://via.placeholder.com/640x960?text=Poster"}
-                    alt={data.title}
-                    className="w-full h-96 md:h-full object-cover"
-                  />
-                </div>
+            {/* Header*/}
+            <MainCard
+              image={posterUrl}
+              poster={!posterUrl ? { title: data.title, year: data.releaseYear ?? undefined, kind } : undefined}
+              title={data.title}
+              description={data.description ?? "Sem descrição disponível."}
+              meta={[
+                { icon: <Calendar size={20} />, text: String(data.releaseYear ?? "—") },
+                { icon: <Tag size={20} />, text: data.genres?.length ? data.genres.map((g) => g.name).join(", ") : "—" },
+                { icon: <Star size={20} className="fill-current text-yellow-500" />, text: "—", className: "text-yellow-700" },
+              ]}
+            />
 
-                <div className="p-8 md:w-2/3">
-                  <h1 className="text-4xl font-bold text-gray-900 mb-4">
-                    {data.title}
-                  </h1>
-
-                  <div className="flex flex-wrap gap-6 mb-6">
-                    <div className="flex items-center text-gray-600">
-                      <Calendar size={20} className="mr-2" />
-                      <span className="font-medium">
-                        {data.releaseYear ?? "—"}
-                      </span>
-                    </div>
-
-                    <div className="flex items-center text-gray-600">
-                      <Tag size={20} className="mr-2" />
-                      <span className="font-medium">
-                        {data.genres && data.genres.length > 0
-                          ? data.genres.map((g) => g.name).join(", ")
-                          : "—"}
-                      </span>
-                    </div>
-
-                    <div className="flex items-center text-yellow-600">
-                      <Star size={20} className="mr-2 fill-current" />
-                      <span className="font-medium">—</span>
-                    </div>
-                  </div>
-
-                  <p className="text-gray-700 text-lg leading-relaxed mb-8">
-                    {data.description ?? "Sem descrição disponível."}
-                  </p>
-                </div>
+            {/* Episodes */}
+            <div className="mt-12">
+              <div className="flex items-center mb-8">
+                <Film size={24} className="mr-3 text-gray-700" />
+                <h2 className="text-2xl font-bold text-gray-900">Episodes</h2>
               </div>
+
+              {epsLoading && <div className="text-gray-600 text-sm">A carregar episódios…</div>}
+              {epsErr && !epsLoading && (
+                <div className="text-red-600 text-sm">{epsErr}</div>
+              )}
+
+              {!epsLoading && !epsErr && (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                  {episodes.map((e) => (
+                    <Card
+                      key={e.id}
+                      image={posterUrl}
+                      aspect="video"
+                      title={e.title}
+                      description={e.overview ?? "—"}
+                      meta={[
+                        { icon: <Calendar size={16} />, text: e.airDate ?? "—" },
+                        { icon: <Tag size={16} />, text: `${e.season != null ? `S${e.season}` : "S–"} · ${e.number != null ? `E${e.number}` : "E–"}` },
+                        ...(e.runtimeMin != null ? [{ icon: <Tag size={16} />, text: `${e.runtimeMin} min` }] : []),
+                      ]}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Cast */}
             <div className="mt-12">
               <div className="flex items-center mb-8">
                 <Users size={24} className="mr-3 text-gray-700" />
-                <h2 className="text-2xl font-bold text-gray-900">Casts</h2>
+                <h2 className="text-2xl font-bold text-gray-900">Cast</h2>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                {data.cast.map((actor) => {
-                  const age = calcAge(actor.birthDate);
+                {data.cast.map((a) => {
+                  const age = calcAge(a.birthDate);
                   return (
-                    <Link
-                      key={actor.actorId}
-                      to={`/actors/${actor.actorId}`}
-                      className="bg-white rounded-xl shadow-sm hover:shadow-lg transition-all duration-300 overflow-hidden group"
-                    >
-                      <div className="aspect-square overflow-hidden">
-                        <img
-                          src={"https://via.placeholder.com/640x640?text=Actor"}
-                          alt={actor.fullName}
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                        />
-                      </div>
-
-                      <div className="p-6">
-                        <h3 className="text-lg font-semibold text-gray-900 mb-2 group-hover:text-blue-600 transition-colors">
-                          {actor.fullName}
-                          {typeof actor.billing === "number" ? (
-                            <span className="ml-2 text-xs text-gray-500 font-normal">
-                              (billing #{actor.billing})
-                            </span>
-                          ) : null}
-                        </h3>
-
-                        <p className="text-gray-600 text-sm">
-                          {actor.nationality ?? "—"}
-                          {age !== null ? ` • ${age} anos` : ""}
-                        </p>
-                      </div>
-                    </Link>
+                    <Card
+                      key={a.actorId}
+                      to={`/actors/${a.actorId}`}
+                      aspect="square"
+                      title={a.fullName}
+                      person={{ name: a.fullName }}
+                      description={a.introduction ?? "—"}
+                      meta={[
+                        { icon: <Users size={16} />, text: a.nationality ?? "—" },
+                        { icon: <Calendar size={16} />, text: age !== null ? `${age} anos` : "—" },
+                      ]}
+                      badge={typeof a.billing === "number" ? `billing #${a.billing}` : undefined}
+                    />
                   );
                 })}
               </div>
             </div>
-
-            {/* Episódios (opcional — ativa se o backend devolver) */}
-            {/* {data.episodes && data.episodes.length > 0 && (
-              <div className="mt-12">
-                <h2 className="text-2xl font-bold text-gray-900 mb-6">Episódios</h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {data.episodes.map(ep => (
-                    <div key={ep.id} className="bg-white rounded-xl shadow p-4">
-                      <div className="text-sm text-gray-500 mb-1">
-                        T{ep.seasonNumber} • E{ep.episodeNumber}
-                      </div>
-                      <div className="font-semibold">{ep.title}</div>
-                      <div className="text-xs text-gray-500">
-                        {ep.releaseDate ? new Date(ep.releaseDate).toLocaleDateString() : "—"}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )} */}
           </>
         )}
       </div>
